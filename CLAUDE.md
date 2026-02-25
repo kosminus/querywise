@@ -8,7 +8,7 @@ QueryWise — a text-to-SQL application with a semantic metadata layer. Users as
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy (async), asyncpg, pgvector, Alembic
 - **Frontend:** React 19, TypeScript, Vite, Mantine UI, React Query, React Router
-- **Databases:** PostgreSQL 16 with pgvector extension (app metadata), PostgreSQL 16 (sample/target DB), Google BigQuery
+- **Databases:** PostgreSQL 16 with pgvector extension (app metadata), PostgreSQL 16 (sample/target DB), Google BigQuery, Databricks
 - **LLM:** Provider-agnostic (Anthropic Claude, OpenAI, Ollama)
 
 ## How to Run
@@ -44,7 +44,7 @@ For manual seeding (if auto-setup disabled): `python backend/scripts/seed_ifrs9_
 Run from `backend/`:
 
 ```bash
-pip install -e ".[llm,dev,bigquery]"  # Install all deps (incl. BigQuery)
+pip install -e ".[llm,dev,bigquery,databricks]"  # Install all deps
 alembic upgrade head                  # Run migrations
 uvicorn app.main:app --reload         # Dev server on :8000
 pytest                                # Run tests
@@ -79,7 +79,7 @@ backend/
 backend/app/
 ├── api/v1/endpoints/    # FastAPI route handlers (all under /api/v1)
 ├── api/v1/schemas/      # Pydantic request/response models
-├── connectors/          # Database connector plugin system (PostgreSQL, BigQuery)
+├── connectors/          # Database connector plugin system (PostgreSQL, BigQuery, Databricks)
 ├── db/models/           # SQLAlchemy ORM models (UUID PKs, timestamps)
 ├── llm/agents/          # LLM agents (composer, validator, interpreter, error handler)
 ├── llm/providers/       # LLM provider implementations (anthropic, openai, ollama)
@@ -188,9 +188,9 @@ If the embedding model is unavailable (not pulled, or Ollama is down), the query
 
 ## Architecture Conventions
 
-- **Connectors:** Extend `BaseConnector` ABC in `app/connectors/`, register in `connector_registry.py`. Built-in: PostgreSQL (`asyncpg`), BigQuery (`google-cloud-bigquery`, lazy-loaded). BigQuery uses service account JSON stored encrypted in connection_string field
+- **Connectors:** Extend `BaseConnector` ABC in `app/connectors/`, register in `connector_registry.py`. Built-in: PostgreSQL (`asyncpg`), BigQuery (`google-cloud-bigquery`, lazy-loaded), Databricks (`databricks-sql-connector`, lazy-loaded). BigQuery uses service account JSON stored encrypted in connection_string field. Databricks uses JSON config (`server_hostname`, `http_path`, `access_token`, `catalog`) stored encrypted; supports both Unity Catalog (INFORMATION_SCHEMA) and Hive metastore (SHOW/DESCRIBE fallback)
 - **LLM Providers:** Extend `BaseLLMProvider` ABC in `app/llm/providers/`, register via `provider_registry`
 - **API routes:** All under `/api/v1`, defined in `app/api/v1/endpoints/`, aggregated in `app/api/v1/router.py`
 - **ORM models:** UUID primary keys, `created_at`/`updated_at` timestamps, pgvector `VECTOR(settings.embedding_dimension)` for embeddings
 - **Services:** Business logic in `app/services/`, never in endpoints directly
-- **SQL safety:** Read-only transactions enforced at connector level, static SQL blocklist in `app/utils/sql_sanitizer.py` (includes BigQuery-specific `EXPORT DATA` / `LOAD DATA` blocks)
+- **SQL safety:** Read-only transactions enforced at connector level, static SQL blocklist in `app/utils/sql_sanitizer.py` (includes BigQuery-specific `EXPORT DATA` / `LOAD DATA` and Databricks-specific `COPY INTO` / `OPTIMIZE` / `VACUUM` blocks)

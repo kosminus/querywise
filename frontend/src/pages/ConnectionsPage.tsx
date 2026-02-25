@@ -234,7 +234,7 @@ function SchemaExplorer({ connectionId }: { connectionId: string }) {
   );
 }
 
-interface BigQueryFormValues {
+interface ConnectionFormValues {
   name: string;
   connector_type: string;
   // PostgreSQL fields
@@ -242,6 +242,11 @@ interface BigQueryFormValues {
   // BigQuery fields
   bq_project_id: string;
   bq_credentials_json: string;
+  // Databricks fields
+  db_server_hostname: string;
+  db_http_path: string;
+  db_access_token: string;
+  db_catalog: string;
   // Shared
   default_schema: string;
   max_query_timeout_seconds: number;
@@ -257,13 +262,17 @@ function AddConnectionModal({
 }) {
   const createMutation = useCreateConnection();
 
-  const form = useForm<BigQueryFormValues>({
+  const form = useForm<ConnectionFormValues>({
     initialValues: {
       name: '',
       connector_type: 'postgresql',
       connection_string: '',
       bq_project_id: '',
       bq_credentials_json: '',
+      db_server_hostname: '',
+      db_http_path: '',
+      db_access_token: '',
+      db_catalog: 'main',
       default_schema: 'public',
       max_query_timeout_seconds: 30,
       max_rows: 1000,
@@ -271,7 +280,7 @@ function AddConnectionModal({
     validate: {
       name: (v) => (v.trim() ? null : 'Name is required'),
       connection_string: (v, values) =>
-        values.connector_type !== 'bigquery' && !v.trim()
+        values.connector_type === 'postgresql' && !v.trim()
           ? 'Connection string is required'
           : null,
       bq_project_id: (v, values) =>
@@ -288,12 +297,26 @@ function AddConnectionModal({
           return 'Invalid JSON';
         }
       },
+      db_server_hostname: (v, values) =>
+        values.connector_type === 'databricks' && !v.trim()
+          ? 'Server hostname is required'
+          : null,
+      db_http_path: (v, values) =>
+        values.connector_type === 'databricks' && !v.trim()
+          ? 'HTTP path is required'
+          : null,
+      db_access_token: (v, values) =>
+        values.connector_type === 'databricks' && !v.trim()
+          ? 'Access token is required'
+          : null,
     },
   });
 
-  const isBigQuery = form.values.connector_type === 'bigquery';
+  const connectorType = form.values.connector_type;
+  const isBigQuery = connectorType === 'bigquery';
+  const isDatabricks = connectorType === 'databricks';
 
-  const handleSubmit = (values: BigQueryFormValues) => {
+  const handleSubmit = (values: ConnectionFormValues) => {
     let connectionString = values.connection_string;
     let defaultSchema = values.default_schema;
 
@@ -304,6 +327,16 @@ function AddConnectionModal({
       });
       if (!defaultSchema || defaultSchema === 'public') {
         defaultSchema = '';
+      }
+    } else if (values.connector_type === 'databricks') {
+      connectionString = JSON.stringify({
+        server_hostname: values.db_server_hostname,
+        http_path: values.db_http_path,
+        access_token: values.db_access_token,
+        catalog: values.db_catalog || 'main',
+      });
+      if (!defaultSchema || defaultSchema === 'public') {
+        defaultSchema = 'default';
       }
     }
 
@@ -350,6 +383,7 @@ function AddConnectionModal({
             data={[
               { value: 'postgresql', label: 'PostgreSQL' },
               { value: 'bigquery', label: 'BigQuery' },
+              { value: 'databricks', label: 'Databricks' },
             ]}
             {...form.getInputProps('connector_type')}
           />
@@ -373,6 +407,33 @@ function AddConnectionModal({
                 {...form.getInputProps('bq_credentials_json')}
               />
             </>
+          ) : isDatabricks ? (
+            <>
+              <TextInput
+                label="Server hostname"
+                placeholder="dbc-a1b2345c-d6e7.cloud.databricks.com"
+                required
+                {...form.getInputProps('db_server_hostname')}
+              />
+              <TextInput
+                label="HTTP path"
+                placeholder="/sql/1.0/warehouses/a1b234c567d8e9fa"
+                required
+                {...form.getInputProps('db_http_path')}
+              />
+              <TextInput
+                label="Access token"
+                placeholder="dapi..."
+                type="password"
+                required
+                {...form.getInputProps('db_access_token')}
+              />
+              <TextInput
+                label="Catalog"
+                placeholder="main"
+                {...form.getInputProps('db_catalog')}
+              />
+            </>
           ) : (
             <TextInput
               label="Connection string"
@@ -383,8 +444,8 @@ function AddConnectionModal({
           )}
 
           <TextInput
-            label={isBigQuery ? 'Dataset' : 'Default schema'}
-            placeholder={isBigQuery ? 'my_dataset' : 'public'}
+            label={isBigQuery ? 'Dataset' : isDatabricks ? 'Schema' : 'Default schema'}
+            placeholder={isBigQuery ? 'my_dataset' : isDatabricks ? 'default' : 'public'}
             {...form.getInputProps('default_schema')}
           />
           <Group grow>

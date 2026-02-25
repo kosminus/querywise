@@ -25,7 +25,7 @@ A full-stack application that translates natural language questions into SQL que
 │                 │                            │
 │  ┌──────────────▼──────────────────────┐    │
 │  │  CONNECTOR LAYER (plugin system)    │    │
-│  │  BaseConnector → PostgreSQL, BigQuery│   │
+│  │  BaseConnector → PG, BQ, Databricks│   │
 │  └─────────────────────────────────────┘    │
 └─────────────────────────────────────────────┘
 ```
@@ -38,7 +38,7 @@ A full-stack application that translates natural language questions into SQL que
 - **Multi-provider LLM** — Anthropic Claude, OpenAI, Ollama (provider-agnostic design)
 - **4 specialized LLM agents** — Query Composer, SQL Validator, Result Interpreter, Error Handler
 - **Intelligent routing** — routes simple/moderate/complex queries to appropriate models
-- **Plugin connector system** — PostgreSQL and BigQuery built-in, extensible to MySQL, Snowflake, and more
+- **Plugin connector system** — PostgreSQL, BigQuery, and Databricks built-in, extensible to MySQL, Snowflake, and more
 - **Security by default** — read-only query execution, SQL blocklist, encrypted connection strings
 - **Query history** — full execution log with favorites, retry counts, token usage
 - **Schema introspection** — auto-discovers tables, columns, types, relationships from target databases
@@ -102,6 +102,17 @@ extra_hosts:
 5. Click Create, then Test and Introspect
 
 The service account needs the **BigQuery User** role (or equivalent) to run queries. The connection credentials are encrypted at rest using Fernet encryption.
+
+### Connecting to Databricks
+
+1. Select **Databricks** as the connector type in the Add Connection form
+2. Enter the **Server hostname** (e.g., `dbc-a1b2345c-d6e7.cloud.databricks.com`)
+3. Enter the **HTTP path** for your SQL warehouse or all-purpose cluster (e.g., `/sql/1.0/warehouses/abc123`)
+4. Enter a **Personal Access Token** (`dapi...`)
+5. Set the **Catalog** (defaults to `main`) and **Schema** (defaults to `default`)
+6. Click Create, then Test and Introspect
+
+Works with both **Unity Catalog** (full INFORMATION_SCHEMA introspection including PKs/FKs) and **Hive metastore** (falls back to SHOW/DESCRIBE commands). Credentials are encrypted at rest.
 
 ### First Steps
 
@@ -304,8 +315,10 @@ querywise/
 │   │   │   ├── connector_registry.py# Plugin registry + connection caching
 │   │   │   ├── postgresql/
 │   │   │   │   └── connector.py     # PostgreSQL (asyncpg, connection pooling)
-│   │   │   └── bigquery/
-│   │   │       └── connector.py     # BigQuery (google-cloud-bigquery, service account auth)
+│   │   │   ├── bigquery/
+│   │   │   │   └── connector.py     # BigQuery (google-cloud-bigquery, service account auth)
+│   │   │   └── databricks/
+│   │   │       └── connector.py     # Databricks (databricks-sql-connector, PAT auth)
 │   │   └── utils/
 │   │       └── sql_sanitizer.py     # Regex blocklist (DDL/DML/admin/injection)
 │   ├── scripts/
@@ -382,7 +395,7 @@ When a user asks a natural language question, the system runs a 7-step pipeline:
 └──────────────────────────────┬──────────────────────────┘
                                ▼
 ┌─ 5. EXECUTION ──────────────────────────────────────────┐
-│  Run SQL via database connector (PostgreSQL / BigQuery)  │
+│  Run SQL via connector (PG / BigQuery / Databricks)      │
 │  Read-only transaction, statement timeout, row limit    │
 │  If DB error → ErrorHandlerAgent retries (max 3x)      │
 └──────────────────────────────┬──────────────────────────┘
@@ -549,8 +562,8 @@ Auto-setup populates:
 
 ## Security
 
-- **Read-only execution** — PostgreSQL queries run inside `SET TRANSACTION READ ONLY`; BigQuery uses read-scoped credentials
-- **SQL blocklist** — static regex patterns block DDL (`DROP`, `ALTER`, `CREATE`), DML (`INSERT`, `UPDATE`, `DELETE`), admin commands (`GRANT`, `COPY`, `EXECUTE`), injection patterns (`pg_sleep`, `dblink`, stacked queries), and BigQuery-specific operations (`EXPORT DATA`, `LOAD DATA`)
+- **Read-only execution** — PostgreSQL queries run inside `SET TRANSACTION READ ONLY`; BigQuery and Databricks enforce read-only via SQL blocklist
+- **SQL blocklist** — static regex patterns block DDL (`DROP`, `ALTER`, `CREATE`), DML (`INSERT`, `UPDATE`, `DELETE`), admin commands (`GRANT`, `COPY`, `EXECUTE`), injection patterns (`pg_sleep`, `dblink`, stacked queries), BigQuery-specific operations (`EXPORT DATA`, `LOAD DATA`), and Databricks-specific operations (`COPY INTO`, `OPTIMIZE`, `VACUUM`)
 - **Encrypted credentials** — connection strings encrypted at rest using Fernet (AES-128-CBC)
 - **Statement timeout** — configurable per connection (default 30s)
 - **Row limits** — configurable per connection (default 1000 rows)

@@ -26,6 +26,9 @@ llm = [
 bigquery = [
     "google-cloud-bigquery>=3.0",
 ]
+databricks = [
+    "databricks-sql-connector[pyarrow]>=3.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

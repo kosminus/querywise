@@ -273,7 +273,7 @@ pre code { background: none; color: inherit; padding: 0; }
   <div class="badges">
     <span class="badge badge-purple">Python 3.12 &middot; FastAPI</span>
     <span class="badge badge-blue">React 19 &middot; TypeScript</span>
-    <span class="badge badge-green">PostgreSQL &middot; pgvector</span>
+    <span class="badge badge-green">PostgreSQL &middot; BigQuery &middot; Databricks</span>
     <span class="badge badge-amber">Claude &middot; OpenAI</span>
     <span class="badge badge-slate">Docker Compose</span>
   </div>
@@ -307,7 +307,7 @@ pre code { background: none; color: inherit; padding: 0; }
         </div>
         <div class="layer layer-teal">
           <span class="layer-label">Connector</span>
-          BaseConnector ABC<br>Plugin Registry<br>PostgreSQL Impl
+          BaseConnector ABC<br>Plugin Registry<br>PG &middot; BQ &middot; Databricks
         </div>
       </div>
       <div class="arrow-down"></div>
@@ -662,12 +662,24 @@ pre code { background: none; color: inherit; padding: 0; }
     <span class="kw">async def</span> <span class="fn">get_sample_values</span>(schema, table, column, limit=<span class="num">20</span>) -&gt; list[Any]</code></pre>
 
   <h3>Supported Connectors</h3>
-  <div class="card-grid card-grid-4">
+  <div class="card-grid card-grid-3">
     <div class="card" style="text-align:center;">
       <h4>PostgreSQL</h4>
       <span class="tag-sm impl">Implemented</span>
-      <p>asyncpg pool, read-only transactions, statement timeout</p>
+      <p>asyncpg pool, read-only transactions, statement timeout, double-quote identifier quoting</p>
     </div>
+    <div class="card" style="text-align:center;">
+      <h4>BigQuery</h4>
+      <span class="tag-sm impl">Implemented</span>
+      <p>google-cloud-bigquery SDK, service account JSON auth, backtick quoting, read-only via SQL blocklist</p>
+    </div>
+    <div class="card" style="text-align:center;">
+      <h4>Databricks</h4>
+      <span class="tag-sm impl">Implemented</span>
+      <p>databricks-sql-connector SDK, PAT auth, Unity Catalog + Hive metastore, backtick quoting</p>
+    </div>
+  </div>
+  <div class="card-grid card-grid-2" style="margin-top:12px;">
     <div class="card" style="text-align:center;">
       <h4>MySQL</h4>
       <span class="tag-sm plan">Planned</span>
@@ -678,32 +690,59 @@ pre code { background: none; color: inherit; padding: 0; }
       <span class="tag-sm plan">Planned</span>
       <p>ConnectorType enum defined</p>
     </div>
-    <div class="card" style="text-align:center;">
-      <h4>BigQuery</h4>
-      <span class="tag-sm plan">Planned</span>
-      <p>ConnectorType enum defined</p>
-    </div>
   </div>
 
-  <h3>PostgreSQL Implementation Details</h3>
+  <h3>Connector Implementation Details</h3>
   <div class="card-grid card-grid-3">
-    <div class="card">
-      <h4>Read-Only Enforcement</h4>
-      <p><code>conn.transaction(readonly=True)</code> at asyncpg level. Every query runs inside a read-only transaction.</p>
+    <div class="card" style="border-top:3px solid #10b981;">
+      <h4>PostgreSQL</h4>
+      <ul>
+        <li><strong>Driver:</strong> asyncpg (native async)</li>
+        <li><strong>Read-only:</strong> <code>conn.transaction(readonly=True)</code></li>
+        <li><strong>Timeout:</strong> <code>SET LOCAL statement_timeout</code></li>
+        <li><strong>Introspection:</strong> <code>information_schema</code> + <code>pg_catalog</code></li>
+        <li><strong>Row limit:</strong> Auto <code>LIMIT N+1</code> wrapping</li>
+      </ul>
     </div>
-    <div class="card">
-      <h4>Statement Timeout</h4>
-      <p><code>SET LOCAL statement_timeout = '{ms}'</code> per execution. Default 30s, configurable per connection.</p>
+    <div class="card" style="border-top:3px solid #3b82f6;">
+      <h4>BigQuery</h4>
+      <ul>
+        <li><strong>SDK:</strong> google-cloud-bigquery (sync, wrapped in <code>asyncio.to_thread</code>)</li>
+        <li><strong>Auth:</strong> Service account JSON (encrypted at rest)</li>
+        <li><strong>Read-only:</strong> SQL blocklist (<code>EXPORT DATA</code>, <code>LOAD DATA</code>)</li>
+        <li><strong>Introspection:</strong> <code>INFORMATION_SCHEMA.TABLES/COLUMNS</code></li>
+        <li><strong>Quoting:</strong> Backtick identifiers</li>
+      </ul>
     </div>
-    <div class="card">
-      <h4>Auto Row Limiting</h4>
-      <p>Wraps query: <code>SELECT * FROM (query) AS _q LIMIT N+1</code>. Detects truncation when rows &gt; max.</p>
+    <div class="card" style="border-top:3px solid #8b5cf6;">
+      <h4>Databricks</h4>
+      <ul>
+        <li><strong>SDK:</strong> databricks-sql-connector (sync, wrapped in <code>asyncio.to_thread</code>)</li>
+        <li><strong>Auth:</strong> Personal Access Token (PAT)</li>
+        <li><strong>Read-only:</strong> SQL blocklist (<code>COPY INTO</code>, <code>OPTIMIZE</code>, <code>VACUUM</code>)</li>
+        <li><strong>Introspection:</strong> Unity Catalog (<code>information_schema</code>) with Hive metastore fallback (<code>SHOW/DESCRIBE</code>)</li>
+        <li><strong>Namespace:</strong> 3-level (<code>catalog.schema.table</code>)</li>
+      </ul>
     </div>
   </div>
 
   <h3>Plugin Registry</h3>
-<pre><code><span class="cmt"># Register a new connector type</span>
-<span class="fn">register_connector</span>(ConnectorType.MYSQL, MySQLConnector)
+<pre><code><span class="cmt"># Built-in connectors registered at import time</span>
+<span class="cmt"># PostgreSQL — always available</span>
+_CONNECTOR_CLASSES[ConnectorType.POSTGRESQL] = PostgreSQLConnector
+
+<span class="cmt"># BigQuery &amp; Databricks — lazy registration (optional deps)</span>
+<span class="kw">try</span>:
+    <span class="kw">from</span> app.connectors.bigquery.connector <span class="kw">import</span> BigQueryConnector
+    _CONNECTOR_CLASSES[ConnectorType.BIGQUERY] = BigQueryConnector
+<span class="kw">except</span> ImportError:
+    <span class="kw">pass</span>  <span class="cmt"># google-cloud-bigquery not installed</span>
+
+<span class="kw">try</span>:
+    <span class="kw">from</span> app.connectors.databricks.connector <span class="kw">import</span> DatabricksConnector
+    _CONNECTOR_CLASSES[ConnectorType.DATABRICKS] = DatabricksConnector
+<span class="kw">except</span> ImportError:
+    <span class="kw">pass</span>  <span class="cmt"># databricks-sql-connector not installed</span>
 
 <span class="cmt"># Get or create a cached connector instance</span>
 connector = <span class="kw">await</span> <span class="fn">get_or_create_connector</span>(
@@ -906,13 +945,13 @@ connector = <span class="kw">await</span> <span class="fn">get_or_create_connect
   <div class="security-grid">
     <div class="sec-card">
       <span class="icon">&#x1f512;</span>
-      <h4>Read-Only Transactions</h4>
-      <p>Every query executes inside <code>asyncpg transaction(readonly=True)</code>. The database itself rejects any write operations.</p>
+      <h4>Read-Only Enforcement</h4>
+      <p>PostgreSQL: <code>asyncpg transaction(readonly=True)</code>. BigQuery &amp; Databricks: read-only enforced via SQL blocklist (no native read-only mode).</p>
     </div>
     <div class="sec-card">
       <span class="icon">&#x1f6ab;</span>
       <h4>SQL Blocklist</h4>
-      <p>Static regex patterns block DDL (<code>DROP</code>, <code>ALTER</code>, <code>CREATE</code>), DML (<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>), admin commands, and injection patterns (<code>pg_sleep</code>, <code>dblink</code>, stacked queries).</p>
+      <p>Static regex patterns block DDL, DML, admin commands, injection patterns (<code>pg_sleep</code>, <code>dblink</code>), BigQuery ops (<code>EXPORT DATA</code>, <code>LOAD DATA</code>), and Databricks ops (<code>COPY INTO</code>, <code>OPTIMIZE</code>, <code>VACUUM</code>).</p>
     </div>
     <div class="sec-card">
       <span class="icon">&#x1f511;</span>
@@ -922,7 +961,7 @@ connector = <span class="kw">await</span> <span class="fn">get_or_create_connect
     <div class="sec-card">
       <span class="icon">&#x23f1;</span>
       <h4>Statement Timeout</h4>
-      <p>PostgreSQL <code>SET LOCAL statement_timeout</code> per query. Default 30 seconds, configurable per connection.</p>
+      <p>PostgreSQL: <code>SET LOCAL statement_timeout</code>. BigQuery &amp; Databricks: <code>asyncio.wait_for()</code>. Default 30s, configurable per connection.</p>
     </div>
     <div class="sec-card">
       <span class="icon">&#x1f4ca;</span>

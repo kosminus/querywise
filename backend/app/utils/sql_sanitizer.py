@@ -25,6 +25,10 @@ _BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # BigQuery-specific
     (re.compile(r"\bEXPORT\s+DATA\b", re.IGNORECASE), "EXPORT DATA is not allowed"),
     (re.compile(r"\bLOAD\s+DATA\b", re.IGNORECASE), "LOAD DATA is not allowed"),
+    # Databricks-specific
+    (re.compile(r"\bCOPY\s+INTO\b", re.IGNORECASE), "COPY INTO is not allowed"),
+    (re.compile(r"\bOPTIMIZE\b", re.IGNORECASE), "OPTIMIZE is not allowed"),
+    (re.compile(r"\bVACUUM\b", re.IGNORECASE), "VACUUM is not allowed"),
     # Stacked queries (semicolon followed by another statement)
     (
         re.compile(r";\s*\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b", re.IGNORECASE),

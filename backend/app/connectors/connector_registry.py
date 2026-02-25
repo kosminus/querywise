@@ -14,6 +14,14 @@ try:
 except ImportError:
     pass
 
+# Lazy-register Databricks only when databricks-sql-connector is installed
+try:
+    from app.connectors.databricks.connector import DatabricksConnector
+
+    _CONNECTOR_CLASSES[ConnectorType.DATABRICKS] = DatabricksConnector
+except ImportError:
+    pass
+
 # Cache of active connector instances by connection ID
 _active_connectors: dict[str, BaseConnector] = {}
 
