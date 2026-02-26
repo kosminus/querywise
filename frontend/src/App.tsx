@@ -5,6 +5,7 @@ import { ConnectionsPage } from './pages/ConnectionsPage';
 import { GlossaryPage } from './pages/GlossaryPage';
 import { MetricsPage } from './pages/MetricsPage';
 import { DictionaryPage } from './pages/DictionaryPage';
+import { KnowledgePage } from './pages/KnowledgePage';
 import { HistoryPage } from './pages/HistoryPage';
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/glossary" element={<GlossaryPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
         <Route path="/dictionary" element={<DictionaryPage />} />
+        <Route path="/knowledge" element={<KnowledgePage />} />
         <Route path="/history" element={<HistoryPage />} />
       </Route>
     </Routes>

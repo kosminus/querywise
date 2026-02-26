@@ -21,6 +21,7 @@ from app.config import settings
 from app.db.models.connection import DatabaseConnection
 from app.db.models.dictionary import DictionaryEntry
 from app.db.models.glossary import GlossaryTerm
+from app.db.models.knowledge import KnowledgeDocument
 from app.db.models.metric import MetricDefinition
 from app.db.models.schema_cache import CachedColumn, CachedTable
 from app.db.session import async_session_factory
@@ -37,6 +38,7 @@ EMBEDDING_COLUMNS = [
     ("glossary_terms", "term_embedding"),
     ("metric_definitions", "metric_embedding"),
     ("sample_queries", "question_embedding"),
+    ("knowledge_chunks", "chunk_embedding"),
 ]
 
 
@@ -372,6 +374,86 @@ DICTIONARY_ENTRIES: dict[tuple[str, str], list[dict]] = {
     ],
 }
 
+# ---------------------------------------------------------------------------
+# Knowledge document — IFRS 9 staging and ECL rules
+# ---------------------------------------------------------------------------
+KNOWLEDGE_DOCUMENT = {
+    "title": "IFRS 9 Staging & ECL Policy Summary",
+    "source_url": "https://internal.wiki/ifrs9-staging-policy",
+    "content": """\
+IFRS 9 Staging Criteria and ECL Calculation Policy
+
+This document describes the bank's staging criteria under IFRS 9 and the \
+corresponding Expected Credit Loss (ECL) calculation methodology.
+
+Stage Classification
+
+All facilities are classified into one of three stages at each reporting date:
+
+Stage 1 — Performing: The facility has not experienced a Significant Increase \
+in Credit Risk (SICR) since initial recognition. The bank recognises \
+12-month ECL as a provision.
+
+Stage 2 — Underperforming (SICR): The facility has experienced a SICR but is \
+not yet credit-impaired. The bank recognises lifetime ECL. SICR triggers \
+include: (a) a credit rating downgrade of 2 or more notches since origination, \
+(b) the facility being more than 30 days past due, (c) the counterparty being \
+placed on a watch list, (d) adverse macro-economic indicators for the \
+counterparty's sector.
+
+Stage 3 — Non-Performing (Credit-Impaired): The facility meets the definition \
+of default. Default triggers include: (a) more than 90 days past due, \
+(b) the counterparty is flagged as defaulted (is_defaulted = true), \
+(c) the facility has been restructured due to financial difficulty. \
+Lifetime ECL is recognised and interest revenue is calculated on the \
+net carrying amount (gross amount minus ECL provision).
+
+ECL Calculation
+
+ECL is calculated as: ECL = PD x LGD x EAD, where:
+- PD (Probability of Default): 12-month PD for Stage 1, lifetime PD for \
+Stage 2 and 3. PD values are stored in the ecl_provisions table.
+- LGD (Loss Given Default): Estimated loss percentage if default occurs, \
+taking into account collateral recoveries. Lower LGD values indicate \
+better collateral coverage. Stored in ecl_provisions.lgd.
+- EAD (Exposure at Default): The gross carrying amount of the facility \
+at the reporting date. Stored in exposures.ead.
+
+The ecl_provisions table contains both ecl_12m (12-month ECL, used for \
+Stage 1 reporting) and ecl_lifetime (lifetime ECL, used for Stage 2 \
+and Stage 3 reporting).
+
+Collateral and LGD
+
+Collateral reduces LGD. Each collateral record is linked to a facility \
+and has a collateral_value and haircut percentage. The net collateral \
+value (collateral_value * (1 - haircut)) offsets the exposure. \
+Collateral types include property, cash deposits, bank guarantees, \
+and securities.
+
+Stage Migration
+
+The staging_history table tracks all stage transitions. Each record \
+contains the from_stage, to_stage, transition_date, and a reason code. \
+Reason codes are: origination (new loan at Stage 1), upgrade (improvement \
+in credit quality), downgrade (SICR or deterioration), cure (return to \
+performing after impairment), default (borrower entered default). \
+A facility moving from Stage 1 to Stage 2 is a "downgrade" due to SICR. \
+A facility moving from Stage 3 back to Stage 1 is a "cure".
+
+Reporting Dimensions
+
+The portfolio is typically analysed along these dimensions:
+- By stage (1, 2, 3) — the primary risk segmentation
+- By segment (retail, corporate, SME) — business unit view
+- By facility_type (mortgage, corporate_loan, consumer_loan, credit_card, \
+overdraft) — product type view
+- By currency (EUR, USD, GBP) — currency exposure view
+- By credit_rating (AAA through CCC) — credit quality distribution
+- By reporting_date — time series analysis across quarters
+""",
+}
+
 
 MAX_RETRIES = 5
 RETRY_DELAY_SECONDS = 3
@@ -405,6 +487,7 @@ async def auto_setup_sample_db() -> None:
                     await _seed_glossary(db, connection_id)
                     await _seed_metrics(db, connection_id)
                     await _seed_dictionary(db, connection_id)
+                    await _seed_knowledge(db, connection_id)
 
                     await db.commit()
                     logger.info(
@@ -531,6 +614,34 @@ async def _seed_dictionary(db, connection_id: uuid.UUID) -> None:
 
     await db.flush()
     logger.info("Auto-setup: seeded %d dictionary entries", total)
+
+
+async def _seed_knowledge(db, connection_id: uuid.UUID) -> None:
+    """Seed a sample knowledge document if none exist."""
+    count = await db.scalar(
+        select(func.count()).select_from(KnowledgeDocument).where(
+            KnowledgeDocument.connection_id == connection_id
+        )
+    )
+    if count and count > 0:
+        logger.info(
+            "Auto-setup: knowledge already has %d documents, skipping", count
+        )
+        return
+
+    from app.services.knowledge_service import import_document
+
+    logger.info("Auto-setup: importing knowledge document...")
+    doc = await import_document(
+        db,
+        connection_id=connection_id,
+        title=KNOWLEDGE_DOCUMENT["title"],
+        content=KNOWLEDGE_DOCUMENT["content"],
+        source_url=KNOWLEDGE_DOCUMENT["source_url"],
+    )
+    logger.info(
+        "Auto-setup: knowledge document imported (%d chunks)", doc.chunk_count
+    )
 
 
 async def _generate_embeddings_background(connection_id: uuid.UUID) -> None:

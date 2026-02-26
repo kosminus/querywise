@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     dictionary,
     glossary,
     health,
+    knowledge,
     metrics,
     query,
     query_history,
@@ -23,3 +24,4 @@ api_router.include_router(metrics.router)
 api_router.include_router(dictionary.router)
 api_router.include_router(sample_queries.router)
 api_router.include_router(query_history.router)
+api_router.include_router(knowledge.router)

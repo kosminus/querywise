@@ -269,7 +269,7 @@ pre code { background: none; color: inherit; padding: 0; }
 <!-- HERO -->
 <header class="hero" id="top">
   <h1>QueryWise Platform Architecture</h1>
-  <p>A full-stack application that translates natural language questions into SQL queries using a semantic metadata layer, multi-agent LLM orchestration, and a pluggable database connector system.</p>
+  <p>A full-stack application that translates natural language questions into SQL queries using a semantic metadata layer (glossary, metrics, dictionary, knowledge base), multi-agent LLM orchestration, and a pluggable database connector system.</p>
   <div class="badges">
     <span class="badge badge-purple">Python 3.12 &middot; FastAPI</span>
     <span class="badge badge-blue">React 19 &middot; TypeScript</span>
@@ -299,7 +299,7 @@ pre code { background: none; color: inherit; padding: 0; }
       <div class="sub-layers">
         <div class="layer layer-indigo">
           <span class="layer-label">Semantic</span>
-          Context Builder<br>Schema Linker<br>Prompt Assembler
+          Context Builder<br>Schema Linker<br>Knowledge Resolver<br>Prompt Assembler
         </div>
         <div class="layer layer-amber">
           <span class="layer-label">LLM Orchestration</span>
@@ -404,6 +404,7 @@ pre code { background: none; color: inherit; padding: 0; }
     <div class="card"><h4>GlossaryPage</h4><p>Business glossary terms. Create/edit modal with SQL expression, related tables/columns.</p></div>
     <div class="card"><h4>MetricsPage</h4><p>Named metric definitions. SQL expression, aggregation type, dimensions.</p></div>
     <div class="card"><h4>DictionaryPage</h4><p>Column value mappings. Cascading connection &rarr; table &rarr; column selection.</p></div>
+    <div class="card"><h4>KnowledgePage</h4><p>Import business documentation (paste text or fetch URL). View chunks, delete documents.</p></div>
     <div class="card"><h4>HistoryPage</h4><p>Query execution log with favorites, expandable SQL/summary, retry badges.</p></div>
   </div>
 
@@ -455,6 +456,13 @@ pre code { background: none; color: inherit; padding: 0; }
       <tr><td class="col-method delete">DELETE</td><td><code>/connections/{id}/metrics/{mid}</code></td><td>Delete metric</td></tr>
       <tr><td class="col-method get">GET</td><td><code>/columns/{cid}/dictionary</code></td><td>List dictionary entries</td></tr>
       <tr><td class="col-method post">POST</td><td><code>/columns/{cid}/dictionary</code></td><td>Create dictionary entry</td></tr>
+      <tr><td colspan="3" style="background:#f8fafc; font-weight:700; font-size:12px; color:#64748b;">KNOWLEDGE</td></tr>
+      <tr><td class="col-method get">GET</td><td><code>/connections/{id}/knowledge</code></td><td>List knowledge documents</td></tr>
+      <tr><td class="col-method post">POST</td><td><code>/connections/{id}/knowledge</code></td><td>Import document (title + content + optional source_url)</td></tr>
+      <tr><td class="col-method get">GET</td><td><code>/connections/{id}/knowledge/{doc_id}</code></td><td>Get document with chunks</td></tr>
+      <tr><td class="col-method delete">DELETE</td><td><code>/connections/{id}/knowledge/{doc_id}</code></td><td>Delete document + chunks</td></tr>
+      <tr><td class="col-method post">POST</td><td><code>/knowledge/fetch-url</code></td><td>Fetch URL &rarr; parse HTML &rarr; return title + content</td></tr>
+      <tr><td colspan="3" style="background:#f8fafc; font-weight:700; font-size:12px; color:#64748b;">SAMPLE QUERIES</td></tr>
       <tr><td class="col-method get">GET</td><td><code>/connections/{id}/sample-queries</code></td><td>List sample queries</td></tr>
       <tr><td class="col-method post">POST</td><td><code>/connections/{id}/sample-queries</code></td><td>Create sample query</td></tr>
       <tr><td colspan="3" style="background:#f8fafc; font-weight:700; font-size:12px; color:#64748b;">QUERY</td></tr>
@@ -471,7 +479,7 @@ pre code { background: none; color: inherit; padding: 0; }
 <!-- ===== 5. SEMANTIC LAYER ===== -->
 <section id="semantic">
   <h2>Semantic Layer <span class="badge badge-purple" style="font-size:10px; vertical-align:middle;">Core IP</span></h2>
-  <p>The semantic layer is the product's key differentiator. It selects the most relevant database context for each natural language question using a hybrid strategy: <strong>vector similarity + keyword matching + foreign key graph traversal</strong>.</p>
+  <p>The semantic layer is the product's key differentiator. It selects the most relevant database context for each natural language question using a hybrid strategy: <strong>vector similarity + keyword matching + foreign key graph traversal</strong>. Imported business knowledge (Confluence pages, wiki articles, policy documents) is chunked, embedded, and injected as additional context.</p>
 
   <h3>Context Building Pipeline (8 Steps)</h3>
   <div class="flow">
@@ -507,8 +515,8 @@ pre code { background: none; color: inherit; padding: 0; }
     <div class="flow-arrow"></div>
     <div class="flow-step">
       <span class="step-num">6</span>
-      <span class="step-title">Resolve Glossary, Metrics, Dictionary</span>
-      <div class="step-desc">Match business terms + metric names in question text &amp; by embedding similarity. Fetch value mappings for selected columns.</div>
+      <span class="step-title">Resolve Glossary, Metrics, Knowledge, Dictionary</span>
+      <div class="step-desc">Match business terms + metric names in question text &amp; by embedding similarity. Find top 5 knowledge chunks by vector similarity (keyword ILIKE fallback). Fetch value mappings for selected columns.</div>
     </div>
     <div class="flow-arrow"></div>
     <div class="flow-step">
@@ -520,7 +528,7 @@ pre code { background: none; color: inherit; padding: 0; }
     <div class="flow-step step-success">
       <span class="step-num">8</span>
       <span class="step-title">Assemble Prompt</span>
-      <div class="step-desc">Format into structured sections: Schema &rarr; Relationships &rarr; Glossary &rarr; Metrics &rarr; Dictionary &rarr; Examples &rarr; Constraints</div>
+      <div class="step-desc">Format into structured sections: Schema &rarr; Relationships &rarr; Glossary &rarr; Metrics &rarr; Knowledge &rarr; Dictionary &rarr; Examples &rarr; Constraints</div>
     </div>
   </div>
 
@@ -549,7 +557,7 @@ pre code { background: none; color: inherit; padding: 0; }
   </div>
 
   <h3>Semantic Metadata Types</h3>
-  <div class="card-grid card-grid-2">
+  <div class="card-grid card-grid-3">
     <div class="card">
       <h4>Business Glossary</h4>
       <p>Maps business terms to SQL expressions.</p>
@@ -564,6 +572,11 @@ pre code { background: none; color: inherit; padding: 0; }
       <h4>Data Dictionary</h4>
       <p>Column value mappings so the LLM understands coded values.</p>
       <p style="color:#475569; font-size:12px;"><code>stage: 1 &rarr; Performing, 2 &rarr; SICR, 3 &rarr; Credit-Impaired</code></p>
+    </div>
+    <div class="card">
+      <h4>Knowledge Base</h4>
+      <p>Imported documentation (Confluence, wikis, HTML pages) chunked and embedded for semantic retrieval.</p>
+      <p style="color:#475569; font-size:12px;">IFRS 9 policy doc &rarr; top 5 relevant chunks injected as <code>=== BUSINESS KNOWLEDGE ===</code></p>
     </div>
     <div class="card">
       <h4>Sample Queries</h4>
@@ -768,7 +781,7 @@ connector = <span class="kw">await</span> <span class="fn">get_or_create_connect
     <div class="flow-step">
       <span class="step-num">2</span>
       <span class="step-title">Context Builder</span>
-      <div class="step-desc">Embed question &rarr; hybrid table search (vector + keyword + FK) &rarr; resolve glossary/metrics/dictionary &rarr; find sample queries &rarr; assemble structured prompt</div>
+      <div class="step-desc">Embed question &rarr; hybrid table search (vector + keyword + FK) &rarr; resolve glossary/metrics/knowledge/dictionary &rarr; find sample queries &rarr; assemble structured prompt</div>
     </div>
     <div class="flow-arrow"></div>
     <div class="flow-step">
@@ -901,6 +914,26 @@ connector = <span class="kw">await</span> <span class="fn">get_or_create_connect
       <div class="er-col"><span>is_validated</span><span class="type">BOOLEAN</span></div>
       <div class="er-col"><span>question_embedding</span><span class="type" style="color:#f59e0b;">VECTOR(1536)</span></div>
     </div>
+
+    <div class="er-table">
+      <div class="er-table-head">knowledge_documents</div>
+      <div class="er-col"><span><span class="pk">PK</span> id</span><span class="type">UUID</span></div>
+      <div class="er-col"><span><span class="fk">FK</span> connection_id</span><span class="type">UUID</span></div>
+      <div class="er-col"><span>title</span><span class="type">VARCHAR(500)</span></div>
+      <div class="er-col"><span>source_url</span><span class="type">TEXT</span></div>
+      <div class="er-col"><span>content</span><span class="type">TEXT</span></div>
+      <div class="er-col"><span>chunk_count</span><span class="type">INTEGER</span></div>
+    </div>
+
+    <div class="er-table">
+      <div class="er-table-head">knowledge_chunks <span class="vec">Vector(1536)</span></div>
+      <div class="er-col"><span><span class="pk">PK</span> id</span><span class="type">UUID</span></div>
+      <div class="er-col"><span><span class="fk">FK</span> document_id</span><span class="type">UUID</span></div>
+      <div class="er-col"><span>chunk_index</span><span class="type">INTEGER</span></div>
+      <div class="er-col"><span>content</span><span class="type">TEXT</span></div>
+      <div class="er-col"><span>content_hash</span><span class="type">VARCHAR(64)</span></div>
+      <div class="er-col"><span>chunk_embedding</span><span class="type" style="color:#f59e0b;">VECTOR(1536)</span></div>
+    </div>
   </div>
 
   <div class="er-grid" style="grid-template-columns:1fr;">
@@ -933,7 +966,7 @@ connector = <span class="kw">await</span> <span class="fn">get_or_create_connect
   </div>
 
   <div class="note">
-    <strong>Embedding columns</strong> are present on 5 tables: <code>cached_tables</code>, <code>cached_columns</code>, <code>glossary_terms</code>, <code>metric_definitions</code>, and <code>sample_queries</code>. Dimension is configurable via <code>EMBEDDING_DIMENSION</code> (1536 for OpenAI, 768 for Ollama). HNSW indexes for fast cosine similarity search.
+    <strong>Embedding columns</strong> are present on 6 tables: <code>cached_tables</code>, <code>cached_columns</code>, <code>glossary_terms</code>, <code>metric_definitions</code>, <code>sample_queries</code>, and <code>knowledge_chunks</code>. Dimension is configurable via <code>EMBEDDING_DIMENSION</code> (1536 for OpenAI, 768 for Ollama). HNSW indexes for fast cosine similarity search.
   </div>
 </section>
 

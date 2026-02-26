@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.glossary import GlossaryTerm
+from app.db.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.db.models.metric import MetricDefinition
 from app.db.models.sample_query import SampleQuery
 from app.db.models.schema_cache import CachedColumn, CachedTable
@@ -65,6 +66,11 @@ async def embed_sample_query(query: SampleQuery) -> list[float]:
     return await embed_text(query.natural_language)
 
 
+async def embed_knowledge_chunk(chunk: KnowledgeChunk) -> list[float]:
+    """Generate an embedding for a knowledge chunk."""
+    return await embed_text(chunk.content)
+
+
 async def count_items_needing_embeddings(
     db: AsyncSession, connection_id
 ) -> int:
@@ -110,6 +116,17 @@ async def count_items_needing_embeddings(
         select(func.count()).select_from(SampleQuery).where(
             SampleQuery.connection_id == connection_id,
             SampleQuery.question_embedding.is_(None),
+        )
+    )
+    total += result.scalar_one()
+
+    result = await db.execute(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
+        .where(
+            KnowledgeDocument.connection_id == connection_id,
+            KnowledgeChunk.chunk_embedding.is_(None),
         )
     )
     total += result.scalar_one()
@@ -188,6 +205,21 @@ async def generate_embeddings_for_connection(
     )
     for sq in result.scalars().all():
         sq.question_embedding = await embed_sample_query(sq)
+        count += 1
+        if on_progress:
+            on_progress()
+
+    # Knowledge chunks
+    result = await db.execute(
+        select(KnowledgeChunk)
+        .join(KnowledgeDocument, KnowledgeChunk.document_id == KnowledgeDocument.id)
+        .where(
+            KnowledgeDocument.connection_id == connection_id,
+            KnowledgeChunk.chunk_embedding.is_(None),
+        )
+    )
+    for chunk in result.scalars().all():
+        chunk.chunk_embedding = await embed_knowledge_chunk(chunk)
         count += 1
         if on_progress:
             on_progress()

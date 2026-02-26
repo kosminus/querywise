@@ -4,13 +4,14 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 from app.db.models.dictionary import DictionaryEntry
 from app.db.models.glossary import GlossaryTerm
+from app.db.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.db.models.metric import MetricDefinition
 from app.db.models.sample_query import SampleQuery
 from app.db.models.schema_cache import CachedColumn
@@ -39,6 +40,13 @@ class ResolvedDictionary:
     table_name: str
     column_name: str
     mappings: dict[str, str]  # raw_value -> display_value
+
+
+@dataclass
+class ResolvedKnowledge:
+    title: str
+    source_url: str | None
+    content: str
 
 
 @dataclass
@@ -240,3 +248,83 @@ async def find_similar_queries(
     except Exception:
         logger.warning("Sample query vector search failed.", exc_info=True)
         return []
+
+
+async def resolve_knowledge(
+    db: AsyncSession,
+    connection_id: uuid.UUID,
+    question: str,
+    question_embedding: list[float] | None,
+    limit: int = 5,
+) -> list[ResolvedKnowledge]:
+    """Find the most relevant knowledge chunks.
+
+    Uses vector similarity when embeddings are available, falls back to
+    keyword ILIKE search otherwise (or when vector search fails).
+    """
+    if question_embedding is not None:
+        try:
+            stmt = (
+                select(KnowledgeChunk, KnowledgeDocument)
+                .join(
+                    KnowledgeDocument,
+                    KnowledgeChunk.document_id == KnowledgeDocument.id,
+                )
+                .where(
+                    KnowledgeDocument.connection_id == connection_id,
+                    KnowledgeChunk.chunk_embedding.isnot(None),
+                )
+                .order_by(
+                    KnowledgeChunk.chunk_embedding.cosine_distance(
+                        question_embedding
+                    )
+                )
+                .limit(limit)
+            )
+            result = await db.execute(stmt)
+            rows = result.all()
+            if rows:
+                return [
+                    ResolvedKnowledge(
+                        title=doc.title,
+                        source_url=doc.source_url,
+                        content=chunk.content,
+                    )
+                    for chunk, doc in rows
+                ]
+        except Exception:
+            logger.warning(
+                "Knowledge vector search failed, using keyword fallback.",
+                exc_info=True,
+            )
+
+    # Keyword fallback
+    keywords = [kw for kw in extract_keywords(question) if len(kw) > 2][:8]
+    if not keywords:
+        return []
+
+    keyword_predicates = [
+        KnowledgeChunk.content.ilike(f"%{kw}%") for kw in keywords
+    ]
+    stmt = (
+        select(KnowledgeChunk, KnowledgeDocument)
+        .join(
+            KnowledgeDocument,
+            KnowledgeChunk.document_id == KnowledgeDocument.id,
+        )
+        .where(
+            KnowledgeDocument.connection_id == connection_id,
+            or_(*keyword_predicates),
+        )
+        .order_by(KnowledgeChunk.chunk_index.asc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return [
+        ResolvedKnowledge(
+            title=doc.title,
+            source_url=doc.source_url,
+            content=chunk.content,
+        )
+        for chunk, doc in result.all()
+    ]

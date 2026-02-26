@@ -31,7 +31,7 @@ python backend/scripts/seed_ifrs9_metadata.py
 
 The sample-db contains an **IFRS 9 banking schema** with 6 tables: `counterparties`, `facilities`, `exposures`, `ecl_provisions`, `collateral`, `staging_history`. Connection string (from Docker): `postgresql://sample:sample_dev@sample-db:5432/sampledb`.
 
-**Auto-setup** (`AUTO_SETUP_SAMPLE_DB=true`, default): On first `docker compose up`, the backend automatically creates the connection, introspects the schema, seeds all metadata (10 glossary terms, 8 metrics, 43 dictionary entries across 12 columns), and launches background embedding generation. Logic in `app/services/setup_service.py`, called from `main.py` lifespan hook. Idempotent — safe to restart.
+**Auto-setup** (`AUTO_SETUP_SAMPLE_DB=true`, default): On first `docker compose up`, the backend automatically creates the connection, introspects the schema, seeds all metadata (10 glossary terms, 8 metrics, 43 dictionary entries across 12 columns, 1 knowledge document), and launches background embedding generation. Logic in `app/services/setup_service.py`, called from `main.py` lifespan hook. Idempotent — safe to restart.
 
 **Startup sequence** (in `main.py` lifespan):
 1. `ensure_embedding_dimensions()` — checks vector column dimensions match `EMBEDDING_DIMENSION`, resizes + nulls stale embeddings if mismatched (handles provider switching)
@@ -85,15 +85,15 @@ backend/app/
 ├── llm/providers/       # LLM provider implementations (anthropic, openai, ollama)
 ├── llm/prompts/         # System/user prompt templates
 ├── llm/utils.py         # Shared LLM utilities (JSON repair for local models)
-├── semantic/            # Core IP: context builder, schema linker, glossary resolver
-├── services/            # Business logic (query pipeline, connection mgmt, embeddings)
+├── semantic/            # Core IP: context builder, schema linker, glossary resolver, knowledge resolver
+├── services/            # Business logic (query pipeline, connection mgmt, embeddings, knowledge import)
 └── utils/               # SQL sanitizer
 
 frontend/src/
 ├── api/                 # Axios API clients (one per resource)
 ├── components/layout/   # AppShell with sidebar navigation
 ├── hooks/               # React Query hooks
-├── pages/               # Route pages (Query, Connections, Glossary, Metrics, Dictionary, History)
+├── pages/               # Route pages (Query, Connections, Glossary, Metrics, Dictionary, Knowledge, History)
 └── types/               # TypeScript interfaces matching backend schemas
 ```
 
@@ -171,7 +171,7 @@ docker compose exec ollama ollama pull nomic-embed-text
 Embeddings are generated in **background asyncio tasks** (non-blocking):
 - **On startup:** after auto-setup seeds, `launch_background_embeddings()` fires a background task
 - **On introspect:** background task launched after schema introspection
-- **On CRUD:** each create/update of glossary term, metric, or sample query embeds inline
+- **On CRUD:** each create/update of glossary term, metric, sample query, or knowledge document embeds inline
 - **Progress tracking:** in-memory tracker (`embedding_progress.py`), exposed at `GET /api/v1/embeddings/status`, displayed as a frontend progress banner (auto-polls every 2s, auto-hides when complete)
 
 ### Graceful degradation
@@ -193,4 +193,5 @@ If the embedding model is unavailable (not pulled, or Ollama is down), the query
 - **API routes:** All under `/api/v1`, defined in `app/api/v1/endpoints/`, aggregated in `app/api/v1/router.py`
 - **ORM models:** UUID primary keys, `created_at`/`updated_at` timestamps, pgvector `VECTOR(settings.embedding_dimension)` for embeddings
 - **Services:** Business logic in `app/services/`, never in endpoints directly
+- **Knowledge:** Import text/HTML content, auto-detect HTML, section-aware chunking (450 words, 80 overlap), vector + keyword search for relevant chunks injected into LLM prompt. URL fetching server-side via `httpx`. Service in `app/services/knowledge_service.py`
 - **SQL safety:** Read-only transactions enforced at connector level, static SQL blocklist in `app/utils/sql_sanitizer.py` (includes BigQuery-specific `EXPORT DATA` / `LOAD DATA` and Databricks-specific `COPY INTO` / `OPTIMIZE` / `VACUUM` blocks)

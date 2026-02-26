@@ -33,7 +33,8 @@ A full-stack application that translates natural language questions into SQL que
 ## Features
 
 - **Natural language to SQL** — ask questions in plain English, get SQL + results + explanations
-- **Semantic metadata layer** — business glossary, metric definitions, data dictionary, sample queries
+- **Semantic metadata layer** — business glossary, metric definitions, data dictionary, knowledge base, sample queries
+- **Knowledge import** — import documentation (Confluence, wikis, HTML pages) to inject relevant business context into SQL generation
 - **Hybrid context selection** — embedding similarity + keyword matching + foreign key graph traversal
 - **Multi-provider LLM** — Anthropic Claude, OpenAI, Ollama (provider-agnostic design)
 - **4 specialized LLM agents** — Query Composer, SQL Validator, Result Interpreter, Error Handler
@@ -117,7 +118,7 @@ Works with both **Unity Catalog** (full INFORMATION_SCHEMA introspection includi
 ### First Steps
 
 1. Open http://localhost:5173
-2. The IFRS 9 sample database is **auto-configured** on first startup — connection, schema introspection, glossary, metrics, and dictionary are all seeded automatically
+2. The IFRS 9 sample database is **auto-configured** on first startup — connection, schema introspection, glossary, metrics, dictionary, and knowledge are all seeded automatically
 3. Go to **Query** and ask a question like "What is the total ECL by stage?"
 
 > **Note:** Auto-setup is controlled by `AUTO_SETUP_SAMPLE_DB=true` (default). Set to `false` to disable. For manual seeding, use `python backend/scripts/seed_ifrs9_metadata.py`.
@@ -154,7 +155,7 @@ docker compose exec ollama ollama pull llama3.1:8b
 docker compose exec ollama ollama pull nomic-embed-text
 ```
 
-**Switching providers:** When you change `EMBEDDING_DIMENSION` (e.g., 1024 → 1536), migration `002_configurable_embedding_dim` automatically resizes vector columns and **clears all existing embeddings** — they are not portable across providers (different dimensions and incompatible vector spaces). Embeddings regenerate automatically on first use with the new provider. Your metadata (glossary, metrics, dictionary) is preserved; only the embedding vectors are reset.
+**Switching providers:** When you change `EMBEDDING_DIMENSION` (e.g., 768 → 1536), migration `002_configurable_embedding_dim` automatically resizes vector columns and **clears all existing embeddings** — they are not portable across providers (different dimensions and incompatible vector spaces). Embeddings regenerate automatically on first use with the new provider. Your metadata (glossary, metrics, dictionary) is preserved; only the embedding vectors are reset.
 
 > **GPU support:** Uncomment the `deploy.resources` section in `docker-compose.yml` under the `ollama` service to enable NVIDIA GPU acceleration.
 
@@ -266,6 +267,7 @@ querywise/
 │   │   │       ├── glossary.py     # GlossaryTerm (with embedding vector)
 │   │   │       ├── metric.py       # MetricDefinition (with embedding vector)
 │   │   │       ├── dictionary.py   # DictionaryEntry (value mappings)
+│   │   │       ├── knowledge.py    # KnowledgeDocument + KnowledgeChunk (with embedding vector)
 │   │   │       ├── sample_query.py # SampleQuery (with embedding vector)
 │   │   │       └── query_history.py# QueryExecution (full audit log)
 │   │   ├── api/v1/
@@ -278,6 +280,7 @@ querywise/
 │   │   │   │   ├── metrics.py      # Metric definitions CRUD
 │   │   │   │   ├── dictionary.py   # Data dictionary CRUD
 │   │   │   │   ├── sample_queries.py
+│   │   │   │   ├── knowledge.py     # Knowledge document CRUD + URL fetch
 │   │   │   │   ├── query.py        # POST /query (full pipeline), POST /query/sql-only
 │   │   │   │   └── query_history.py# History list + favorite toggle
 │   │   │   └── schemas/            # Pydantic request/response models
@@ -286,11 +289,12 @@ querywise/
 │   │   │   ├── connection_service.py# CRUD + encryption + test
 │   │   │   ├── schema_service.py   # Introspect + cache
 │   │   │   ├── embedding_service.py# Generate embeddings (OpenAI or Ollama)
+│   │   │   ├── knowledge_service.py# Knowledge import (HTML parsing, chunking, embedding)
 │   │   │   └── setup_service.py    # Auto-setup sample DB on startup
 │   │   ├── semantic/               # *** Core IP ***
 │   │   │   ├── context_builder.py  # Orchestrates all context selection
 │   │   │   ├── schema_linker.py    # Vector + keyword search for relevant tables
-│   │   │   ├── glossary_resolver.py# Resolves business terms, metrics, dictionary
+│   │   │   ├── glossary_resolver.py# Resolves business terms, metrics, dictionary, knowledge
 │   │   │   ├── prompt_assembler.py # Formats context into structured LLM prompt
 │   │   │   └── relevance_scorer.py # Weighted scoring (embedding + keyword + FK)
 │   │   ├── llm/
@@ -339,7 +343,8 @@ querywise/
         │   ├── client.ts           # Axios instance
         │   ├── connectionApi.ts    # Connection endpoints
         │   ├── queryApi.ts         # Query + history endpoints
-        │   └── glossaryApi.ts      # Glossary + metrics + dictionary endpoints
+        │   ├── glossaryApi.ts      # Glossary + metrics + dictionary endpoints
+│   └── knowledgeApi.ts     # Knowledge document CRUD + URL fetch
         ├── components/
         │   └── layout/
         │       └── AppLayout.tsx   # Mantine AppShell with sidebar nav
@@ -351,6 +356,7 @@ querywise/
         │   ├── GlossaryPage.tsx    # Business glossary term management
         │   ├── MetricsPage.tsx     # Metric definition management
         │   ├── DictionaryPage.tsx  # Column value mapping management
+        │   ├── KnowledgePage.tsx   # Knowledge document import/manage (text + URL fetch)
         │   └── HistoryPage.tsx     # Query execution history + favorites
         └── types/
             └── api.ts              # TypeScript interfaces
@@ -374,7 +380,7 @@ When a user asks a natural language question, the system runs a 7-step pipeline:
 │  • Keyword search: match table/column names directly     │
 │  • FK expansion: include related JOIN tables             │
 │  • Score & prune to top 8 tables                         │
-│  • Resolve glossary terms, metrics, dictionary entries   │
+│  • Resolve glossary terms, metrics, knowledge, dictionary│
 │  • Assemble structured prompt with schema + context      │
 └──────────────────────────────┬──────────────────────────┘
                                ▼
@@ -418,6 +424,12 @@ The context builder is the product's core differentiator. It selects the most re
 1. **Embedding similarity** (50% weight) — cosine distance search via pgvector against table, column, glossary, and metric embeddings
 2. **Keyword matching** (30% weight) — extract keywords from the question, match against table/column names (exact, partial, substring)
 3. **FK graph expansion** (20% weight) — walk foreign key relationships from top-scoring tables to include necessary JOIN tables
+
+Additional context layers are resolved independently and injected into the LLM prompt:
+- **Glossary & Metrics** — keyword + embedding similarity search
+- **Knowledge chunks** — top 5 by vector similarity with keyword ILIKE fallback
+- **Dictionary entries** — all value mappings for columns in selected tables
+- **Sample queries** — top 3 validated queries by embedding similarity (few-shot examples)
 
 This ensures both semantic matches ("how much revenue" finds `orders`) and exact name matches ("the refunds table" finds `refunds`).
 
@@ -504,6 +516,9 @@ All endpoints are under `/api/v1`.
 | `GET/PUT/DELETE` | `/connections/{id}/metrics/{metric_id}` | Get/update/delete metric |
 | `GET/POST` | `/columns/{col_id}/dictionary` | List/create dictionary entries |
 | `PUT/DELETE` | `/columns/{col_id}/dictionary/{entry_id}` | Update/delete entry |
+| `GET/POST` | `/connections/{id}/knowledge` | List/create knowledge documents |
+| `GET/DELETE` | `/connections/{id}/knowledge/{doc_id}` | Get/delete knowledge document |
+| `POST` | `/knowledge/fetch-url` | Fetch URL and return parsed content |
 | `GET/POST` | `/connections/{id}/sample-queries` | List/create sample queries |
 | `PUT/DELETE` | `/connections/{id}/sample-queries/{sq_id}` | Update/delete sample query |
 
@@ -557,6 +572,7 @@ Auto-setup populates:
 - **10 glossary terms**: EAD, PD, LGD, ECL, Stage 1/2/3, SICR, Coverage Ratio, NPL
 - **8 metrics**: Total ECL, Total EAD, Coverage Ratio, Stage 1/2/3 Exposure, Average PD, NPL Ratio
 - **43 dictionary entries**: stage codes, facility types, customer segments, collateral types, staging reasons, credit ratings, default flags, currencies, revolving indicators
+- **1 knowledge document**: IFRS 9 Staging & ECL Policy Summary (staging criteria, ECL calculation, collateral rules, stage migration, reporting dimensions)
 
 ---
 

@@ -1,6 +1,7 @@
 from app.db.models.connection import DatabaseConnection
 from app.db.models.dictionary import DictionaryEntry
 from app.db.models.glossary import GlossaryTerm
+from app.db.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.db.models.metric import MetricDefinition
 from app.db.models.query_history import QueryExecution
 from app.db.models.sample_query import SampleQuery
@@ -16,4 +17,6 @@ __all__ = [
     "DictionaryEntry",
     "SampleQuery",
     "QueryExecution",
+    "KnowledgeDocument",
+    "KnowledgeChunk",
 ]

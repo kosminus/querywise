@@ -5,6 +5,7 @@ import {
   IconBook,
   IconChartBar,
   IconVocabulary,
+  IconFileText,
   IconHistory,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   { label: 'Glossary', path: '/glossary', icon: IconBook },
   { label: 'Metrics', path: '/metrics', icon: IconChartBar },
   { label: 'Dictionary', path: '/dictionary', icon: IconVocabulary },
+  { label: 'Knowledge', path: '/knowledge', icon: IconFileText },
   { label: 'History', path: '/history', icon: IconHistory },
 ];
 

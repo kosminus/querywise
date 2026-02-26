@@ -21,11 +21,13 @@ from app.db.models.schema_cache import CachedRelationship
 from app.semantic.glossary_resolver import (
     ResolvedDictionary,
     ResolvedGlossary,
+    ResolvedKnowledge,
     ResolvedMetric,
     ResolvedSampleQuery,
     find_similar_queries,
     resolve_dictionary,
     resolve_glossary,
+    resolve_knowledge,
     resolve_metrics,
 )
 from app.semantic.prompt_assembler import assemble_prompt
@@ -40,6 +42,7 @@ class BuiltContext:
     tables: list[LinkedTable]
     glossary: list[ResolvedGlossary]
     metrics: list[ResolvedMetric]
+    knowledge: list[ResolvedKnowledge]
     dictionaries: list[ResolvedDictionary]
     sample_queries: list[ResolvedSampleQuery]
     question_embedding: list[float] | None
@@ -97,7 +100,12 @@ async def build_context(
         db, connection_id, question, question_embedding
     )
 
-    # Step 5: Get dictionary entries for all columns in selected tables
+    # Step 5: Resolve knowledge chunks
+    knowledge = await resolve_knowledge(
+        db, connection_id, question, question_embedding
+    )
+
+    # Step 6: Get dictionary entries for all columns in selected tables
     column_ids = []
     for lt in tables:
         for col in lt.columns:
@@ -113,11 +121,12 @@ async def build_context(
     table_ids = [lt.table.id for lt in tables]
     relationships = await _get_relationships_between(db, table_ids)
 
-    # Step 8: Assemble prompt
+    # Step 9: Assemble prompt
     prompt_context = assemble_prompt(
         tables=tables,
         glossary=glossary,
         metrics=metrics,
+        knowledge=knowledge,
         dictionaries=dictionaries,
         sample_queries=sample_queries,
         relationships=relationships,
@@ -129,6 +138,7 @@ async def build_context(
         tables=tables,
         glossary=glossary,
         metrics=metrics,
+        knowledge=knowledge,
         dictionaries=dictionaries,
         sample_queries=sample_queries,
         question_embedding=question_embedding,

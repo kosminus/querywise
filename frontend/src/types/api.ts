@@ -142,3 +142,24 @@ export interface IntrospectionResult {
   columns_found: number;
   relationships_found: number;
 }
+
+export interface KnowledgeDocument {
+  id: string;
+  connection_id: string;
+  title: string;
+  source_url: string | null;
+  chunk_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeChunk {
+  id: string;
+  chunk_index: number;
+  content: string;
+  created_at: string;
+}
+
+export interface KnowledgeDocumentDetail extends KnowledgeDocument {
+  chunks: KnowledgeChunk[];
+}

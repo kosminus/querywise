@@ -3,6 +3,7 @@
 from app.semantic.glossary_resolver import (
     ResolvedDictionary,
     ResolvedGlossary,
+    ResolvedKnowledge,
     ResolvedMetric,
     ResolvedSampleQuery,
 )
@@ -13,6 +14,7 @@ def assemble_prompt(
     tables: list[LinkedTable],
     glossary: list[ResolvedGlossary],
     metrics: list[ResolvedMetric],
+    knowledge: list[ResolvedKnowledge],
     dictionaries: list[ResolvedDictionary],
     sample_queries: list[ResolvedSampleQuery],
     relationships: list[dict],
@@ -75,6 +77,22 @@ def assemble_prompt(
             if m.dimensions:
                 metric_lines.append(f"    Suggested dimensions: {', '.join(m.dimensions)}")
         sections.append("\n".join(metric_lines))
+
+    # Business knowledge section
+    if knowledge:
+        knowledge_lines = ["\n=== BUSINESS KNOWLEDGE ==="]
+        knowledge_lines.append(
+            "Relevant documentation excerpts:"
+        )
+        for k in knowledge:
+            source = k.title
+            if k.source_url:
+                source += f" ({k.source_url})"
+            knowledge_lines.append(f'  [Source: "{source}"]')
+            text = k.content[:500] + "..." if len(k.content) > 500 else k.content
+            knowledge_lines.append(f"  {text}")
+            knowledge_lines.append("")
+        sections.append("\n".join(knowledge_lines))
 
     # Data dictionary section
     if dictionaries:
