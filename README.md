@@ -125,6 +125,21 @@ Works with both **Unity Catalog** (full INFORMATION_SCHEMA introspection includi
 
 > **Note:** Auto-setup is controlled by `AUTO_SETUP_SAMPLE_DB=true` (default). Set to `false` to disable. For manual seeding, use `python backend/scripts/seed_ifrs9_metadata.py`.
 
+### Using QueryWise from Claude (MCP)
+
+QueryWise exposes its semantic layer and query pipeline as an MCP server, mounted on the backend at `/mcp` (streamable HTTP). Add it to Claude Code:
+
+```bash
+claude mcp add --transport http querywise http://localhost:8000/mcp
+```
+
+Once connected, Claude can call tools such as `add_metric`, `add_glossary_term`, `list_connections`, `get_semantic_context`, `generate_sql`, `run_sql`, and `ask` — all backed by the same services as the REST API and UI. Run `tools/list` in Claude or check the backend logs for the full surface.
+
+Example uses:
+
+- *"Add a metric `gross_revenue` on the IFRS 9 connection with expression `SUM(exposure_amount)`."*
+- *"Ask the IFRS 9 connection: What is the total ECL by stage?"*
+
 ### Using Ollama (Fully Local — No API Keys)
 
 QueryWise can run entirely on local hardware using Ollama. No cloud API keys needed.

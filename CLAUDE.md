@@ -85,6 +85,7 @@ backend/app/
 ├── llm/providers/       # LLM provider implementations (anthropic, openai, ollama)
 ├── llm/prompts/         # System/user prompt templates
 ├── llm/utils.py         # Shared LLM utilities (JSON repair for local models)
+├── mcp/                 # FastMCP server mounted at /mcp (streamable HTTP) — reuses services
 ├── semantic/            # Core IP: context builder, schema linker, glossary resolver, knowledge resolver
 ├── services/            # Business logic (query pipeline, connection mgmt, embeddings, knowledge import)
 └── utils/               # SQL sanitizer
