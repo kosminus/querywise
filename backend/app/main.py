@@ -46,6 +46,13 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_prefix)
 
+    # Mount QueryWise as an MCP server at /mcp (streamable HTTP).
+    # Lets Claude and other MCP clients reach the same tools the REST API uses:
+    #   claude mcp add --transport http querywise http://localhost:8000/mcp
+    from app.mcp import mount_mcp
+
+    mount_mcp(app)
+
     return app
 
 
