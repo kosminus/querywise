@@ -38,6 +38,11 @@ dev = [
     "mypy>=1.13",
 ]
 
+[project.scripts]
+# Stdio entry point so any stdio-capable MCP client (Claude Code, Claude
+# Desktop, Cursor, Copilot, Codex, …) can spawn QueryWise as a subprocess.
+querywise-mcp = "app.mcp.stdio:main"
+
 [tool.setuptools.packages.find]
 include=["app"]
 

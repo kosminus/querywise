@@ -186,6 +186,21 @@ def _format_ask_result(res: dict[str, Any], max_preview_rows: int = 20) -> str:
 # FastMCP instance
 # --------------------------------------------------------------------------- #
 
+@asynccontextmanager
+async def _mcp_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
+    """Startup for standalone modes (stdio / direct HTTP via mcp.run).
+
+    HTTP-mount mode bypasses this — FastAPI's own lifespan already runs
+    ensure_embedding_dimensions and auto_setup_sample_db. Starlette does
+    not invoke mounted-app lifespans, which is exactly the behavior we
+    want here.
+    """
+    from app.services.setup_service import ensure_embedding_dimensions
+
+    await ensure_embedding_dimensions()
+    yield {}
+
+
 mcp = FastMCP(
     "querywise",
     instructions=(
@@ -201,6 +216,7 @@ mcp = FastMCP(
     # path inside the mounted app stays at "/" — otherwise URLs would be
     # /mcp/mcp.
     streamable_http_path="/",
+    lifespan=_mcp_lifespan,
 )
 
 

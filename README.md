@@ -125,17 +125,90 @@ Works with both **Unity Catalog** (full INFORMATION_SCHEMA introspection includi
 
 > **Note:** Auto-setup is controlled by `AUTO_SETUP_SAMPLE_DB=true` (default). Set to `false` to disable. For manual seeding, use `python backend/scripts/seed_ifrs9_metadata.py`.
 
-### Using QueryWise from Claude (MCP)
+### Using QueryWise from Claude / Cursor / Copilot / Codex (MCP)
 
-QueryWise exposes its semantic layer and query pipeline as an MCP server, mounted on the backend at `/mcp` (streamable HTTP). Add it to Claude Code:
+QueryWise exposes its semantic layer and query pipeline as an **MCP server**, with two transports:
+
+- **HTTP** at `http://localhost:8000/mcp` (streamable HTTP, mounted on the backend).
+- **stdio** via the `querywise-mcp` console script (runs as a subprocess, talks to the same Postgres).
+
+Both modes expose the same 24 tools — `add_metric`, `add_glossary_term`, `list_connections`, `get_semantic_context`, `generate_sql`, `run_sql`, `ask`, `query_history`, etc. — and share the same backing store as the REST API and the web UI.
+
+#### Claude Code (CLI)
+
+HTTP works out of the box:
 
 ```bash
 claude mcp add --transport http querywise http://localhost:8000/mcp
 ```
 
-Once connected, Claude can call tools such as `add_metric`, `add_glossary_term`, `list_connections`, `get_semantic_context`, `generate_sql`, `run_sql`, and `ask` — all backed by the same services as the REST API and UI. Run `tools/list` in Claude or check the backend logs for the full surface.
+Or stdio if you prefer a subprocess:
 
-Example uses:
+```bash
+claude mcp add querywise -- querywise-mcp
+```
+
+#### Claude Desktop
+
+Claude Desktop's custom connectors require HTTPS, so stdio is the simplest path. Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (or use Settings → Developer → Edit Config) and add:
+
+```json
+{
+  "mcpServers": {
+    "querywise": {
+      "command": "querywise-mcp",
+      "env": {
+        "DATABASE_URL": "postgresql+asyncpg://querywise:querywise_dev@localhost:5432/querywise"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. If you'd rather use the HTTP transport, expose the backend via `ngrok http 8000` and paste the HTTPS URL into **Settings → Connectors → Add custom connector**.
+
+#### Cursor / Windsurf
+
+Add to `.cursor/mcp.json` (project) or the global config:
+
+```json
+{
+  "mcpServers": {
+    "querywise": { "url": "http://localhost:8000/mcp" }
+  }
+}
+```
+
+#### GitHub Copilot (VS Code)
+
+Add to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "querywise": { "type": "http", "url": "http://localhost:8000/mcp" }
+  }
+}
+```
+
+#### Codex CLI
+
+In `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.querywise]
+url = "http://localhost:8000/mcp"
+```
+
+#### Installing the `querywise-mcp` CLI
+
+Available after `pip install -e ./backend` (or any wheel built from this repo). Verify with:
+
+```bash
+querywise-mcp --help        # or just `querywise-mcp` to start the stdio loop
+```
+
+Example uses, once connected:
 
 - *"Add a metric `gross_revenue` on the IFRS 9 connection with expression `SUM(exposure_amount)`."*
 - *"Ask the IFRS 9 connection: What is the total ECL by stage?"*
