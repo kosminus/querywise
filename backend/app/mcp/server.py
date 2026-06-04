@@ -104,8 +104,13 @@ async def _resolve_connection(db: AsyncSession, connection: str) -> DatabaseConn
     )
     conn = result.scalars().first()
     if not conn:
+        # List the actual connection names inline. Some MCP clients drop
+        # list_connections from their tool-search and would otherwise loop
+        # guessing names; seeing the options here lets them self-correct.
+        available = (await db.execute(select(DatabaseConnection.name))).scalars().all()
+        options = ", ".join(repr(n) for n in available) if available else "none configured"
         raise ValueError(
-            f"No connection matching '{connection}'. Use list_connections to see options."
+            f"No connection matching '{connection}'. Available connections: {options}."
         )
     return conn
 
