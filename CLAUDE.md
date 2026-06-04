@@ -108,6 +108,8 @@ frontend/src/
 | `LOG_LEVEL` | `INFO` | Log level |
 | `LOG_FORMAT` | `console` | Log format (`console`, or `json` for log aggregation) |
 | `ENABLE_METRICS` | `true` | Expose Prometheus metrics at `GET /metrics` |
+| `OTEL_ENABLED` | `false` | Enable OpenTelemetry tracing (console exporter, or OTLP if endpoint set) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | OTLP/HTTP traces endpoint (e.g. `http://jaeger:4318/v1/traces`) |
 | `JOB_BACKEND` | `inprocess` | Background job runner (`inprocess` asyncio, or `arq` Redis) |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis URL (used when `JOB_BACKEND=arq`) |
 | `RATE_LIMIT_ENABLED` | `true` | Enforce `MAX_QUERIES_PER_MINUTE` on `/query` endpoints |
@@ -215,9 +217,9 @@ dependencies degrade gracefully — the app boots without `structlog` /
 `prometheus_client` installed.
 
 - **Secrets** (`app/core/secrets.py`): `SecretsProvider` ABC behind connection-string encryption. Default `env` backend = Fernet (preserves original behaviour); `aws`/`gcp`/`azure`/`vault` are registered seams (`register_secrets_backend`). `connection_service.py` calls `get_secrets_provider()`.
-- **Telemetry** (`app/core/telemetry.py`): `configure_logging()` (structlog→stdlib fallback, `console`/`json`), per-request `X-Request-ID` via `ObservabilityMiddleware`, Prometheus metrics at `GET /metrics` (`setup_metrics`). Request id flows into logs + `AppError` responses.
+- **Telemetry** (`app/core/telemetry.py`): `configure_logging()` (structlog→stdlib fallback, `console`/`json`), per-request `X-Request-ID` via `ObservabilityMiddleware`, Prometheus metrics at `GET /metrics` (`setup_metrics`), and OpenTelemetry tracing via `configure_tracing()` + `start_span()` (no-op when `OTEL_ENABLED=false`). The query pipeline (`query_service.py`) emits spans for build_context → compose → validate → execute → interpret. Request id flows into logs + `AppError` responses.
 - **Rate limiting** (`app/core/rate_limit.py`): in-memory `SlidingWindowRateLimiter` wired to `/query` endpoints via `install_rate_limiting` (enforces `MAX_QUERIES_PER_MINUTE`). Swap the store for Redis for multi-replica deploys.
-- **Jobs** (`app/jobs/`): `JobQueue` ABC + `InProcessJobQueue` (asyncio, default) with an `arq`/Redis seam. `launch_background_embeddings` submits through `get_job_queue()`.
+- **Jobs** (`app/jobs/`): `JobQueue` ABC with `InProcessJobQueue` (asyncio, default) and `ArqJobQueue` (Redis). Jobs are registered by name in `registry.py`; `launch_background_embeddings` submits `"generate_embeddings"` through `get_job_queue()`. For arq, run a worker: `JOB_BACKEND=arq arq app.jobs.worker.WorkerSettings` (embedding progress then lives in the worker process).
 - **Health** (`app/api/v1/endpoints/health.py`): `GET /health/live` (process) and `GET /health/ready` (DB + job queue + LLM provider, 503 on failure) for K8s probes.
 - **LLM endpoints:** Azure OpenAI provider (`azure_openai`) added so the pipeline can run inside a customer VPC; registered in `provider_registry`.
 - **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). Optional deps: `pip install -e ".[observability,jobs]"`.

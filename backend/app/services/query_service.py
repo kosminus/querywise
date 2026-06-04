@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.connector_registry import get_or_create_connector
 from app.core.exceptions import AppError, SQLSafetyError
+from app.core.telemetry import start_span
 from app.db.models.query_history import QueryExecution
 from app.llm.agents.error_handler import ErrorHandlerAgent
 from app.llm.agents.query_composer import QueryComposerAgent
@@ -39,14 +40,16 @@ async def execute_nl_query(
     connection_string = get_decrypted_connection_string(conn)
 
     # Step 1: Build context
-    context = await build_context(db, connection_id, question, dialect=conn.connector_type)
+    with start_span("build_context", **{"connection_id": str(connection_id)}):
+        context = await build_context(db, connection_id, question, dialect=conn.connector_type)
 
     # Step 2: Route to LLM
     provider, llm_config = route(question)
 
     # Step 3: Generate SQL
     composer = QueryComposerAgent(provider, llm_config)
-    composer_output = await composer.compose(question, context.prompt_context)
+    with start_span("compose_sql", **{"llm.model": llm_config.model}):
+        composer_output = await composer.compose(question, context.prompt_context)
     generated_sql = composer_output.generated_sql
 
     if not generated_sql:
@@ -61,7 +64,8 @@ async def execute_nl_query(
             c.column_name.upper() for c in lt.columns
         ]
 
-    validation = await validator.validate(generated_sql, schema_tables)
+    with start_span("validate_sql"):
+        validation = await validator.validate(generated_sql, schema_tables)
 
     final_sql = generated_sql
     retry_count = 0
@@ -104,11 +108,12 @@ async def execute_nl_query(
     )
 
     try:
-        result = await connector.execute_query(
-            final_sql,
-            timeout_seconds=conn.max_query_timeout_seconds,
-            max_rows=conn.max_rows,
-        )
+        with start_span("execute_query", **{"db.dialect": conn.connector_type}):
+            result = await connector.execute_query(
+                final_sql,
+                timeout_seconds=conn.max_query_timeout_seconds,
+                max_rows=conn.max_rows,
+            )
     except Exception as e:
         # Try error handler on execution errors
         error_handler = ErrorHandlerAgent(provider, llm_config)
@@ -170,13 +175,14 @@ async def execute_nl_query(
 
     if result.rows:
         interpreter = ResultInterpreterAgent(provider, llm_config)
-        interpretation = await interpreter.interpret(
-            question=question,
-            sql=final_sql,
-            columns=result.columns,
-            rows=result.rows,
-            row_count=result.row_count,
-        )
+        with start_span("interpret_results", **{"row_count": result.row_count}):
+            interpretation = await interpreter.interpret(
+                question=question,
+                sql=final_sql,
+                columns=result.columns,
+                rows=result.rows,
+                row_count=result.row_count,
+            )
         summary = interpretation.summary
         highlights = interpretation.highlights
         followups = interpretation.suggested_followups

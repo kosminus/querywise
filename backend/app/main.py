@@ -8,7 +8,12 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.rate_limit import install_rate_limiting
-from app.core.telemetry import ObservabilityMiddleware, configure_logging, setup_metrics
+from app.core.telemetry import (
+    ObservabilityMiddleware,
+    configure_logging,
+    configure_tracing,
+    setup_metrics,
+)
 from app.db.session import engine
 
 logger = logging.getLogger("querywise")
@@ -32,6 +37,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     configure_logging()
+    configure_tracing()
 
     app = FastAPI(
         title=settings.app_name,

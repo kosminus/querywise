@@ -18,6 +18,7 @@ import logging
 import sys
 import time
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -216,6 +217,90 @@ def setup_metrics(app) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Distributed tracing (OpenTelemetry, optional)
+# ---------------------------------------------------------------------------
+_tracer = None
+_tracing_ready = False
+
+
+def configure_tracing() -> None:
+    """Set up OpenTelemetry tracing if enabled and the SDK is installed.
+
+    Idempotent and dependency-graceful: when ``OTEL_ENABLED`` is false (default)
+    or the SDK is missing, this no-ops and ``start_span`` degrades to a no-op
+    context manager.
+    """
+    global _tracer, _tracing_ready
+    if _tracing_ready:
+        return
+    _tracing_ready = True
+
+    if not settings.otel_enabled:
+        return
+
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:
+        logger.warning(
+            "OTEL_ENABLED=true but the opentelemetry SDK is not installed "
+            "(pip install -e '.[observability]'); tracing disabled."
+        )
+        return
+
+    provider = TracerProvider(resource=Resource.create({"service.name": settings.service_name}))
+    exporter = _build_span_exporter()
+    if exporter is not None:
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+    _tracer = trace.get_tracer("querywise")
+    logger.info("OpenTelemetry tracing enabled (service=%s)", settings.service_name)
+
+
+def _build_span_exporter():
+    endpoint = settings.otel_exporter_otlp_endpoint
+    if endpoint:
+        try:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,
+            )
+
+            return OTLPSpanExporter(endpoint=endpoint)
+        except ImportError:
+            logger.warning(
+                "OTEL_EXPORTER_OTLP_ENDPOINT set but the OTLP exporter is not "
+                "installed; falling back to the console exporter."
+            )
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
+    return ConsoleSpanExporter()
+
+
+def set_tracer(tracer) -> None:
+    """Override the active tracer (used by tests with an in-memory provider)."""
+    global _tracer, _tracing_ready
+    _tracer = tracer
+    _tracing_ready = True
+
+
+@contextmanager
+def start_span(name: str, **attributes):
+    """Start a child span, or a no-op context when tracing is disabled."""
+    if _tracer is None:
+        yield None
+        return
+    with _tracer.start_as_current_span(name) as span:
+        for key, value in attributes.items():
+            try:
+                span.set_attribute(key, value)
+            except Exception:  # noqa: BLE001 — never let instrumentation fail a request
+                pass
+        yield span
+
+
+# ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
 class ObservabilityMiddleware(BaseHTTPMiddleware):
@@ -226,7 +311,11 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         start = time.monotonic()
         status = 500
         try:
-            response = await call_next(request)
+            with start_span(
+                f"{request.method} {request.url.path}",
+                **{"http.method": request.method, "request_id": rid},
+            ):
+                response = await call_next(request)
             status = response.status_code
             return response
         finally:

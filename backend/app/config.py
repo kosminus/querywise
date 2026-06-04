@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     log_format: str = "console"  # console | json (json for production/log aggregation)
     enable_metrics: bool = True  # expose Prometheus /metrics
     service_name: str = "querywise-backend"
+    # OpenTelemetry tracing (off by default — no exporter connections attempted).
+    otel_enabled: bool = False
+    # OTLP/HTTP traces endpoint, e.g. http://jaeger:4318/v1/traces. When unset
+    # while otel is enabled, spans are printed to stdout (ConsoleSpanExporter).
+    otel_exporter_otlp_endpoint: str | None = None
 
     # Background jobs
     job_backend: str = "inprocess"  # inprocess (asyncio) | arq (Redis)

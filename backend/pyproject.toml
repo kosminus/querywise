@@ -33,6 +33,8 @@ databricks = [
 observability = [
     "structlog>=24.0",
     "prometheus-client>=0.20",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-exporter-otlp-proto-http>=1.25",
 ]
 jobs = [
     "arq>=0.26",
