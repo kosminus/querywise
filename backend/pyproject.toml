@@ -30,6 +30,14 @@ bigquery = [
 databricks = [
     "databricks-sql-connector[pyarrow]>=3.0",
 ]
+observability = [
+    "structlog>=24.0",
+    "prometheus-client>=0.20",
+]
+jobs = [
+    "arq>=0.26",
+    "redis>=5.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",

@@ -103,8 +103,15 @@ frontend/src/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql+asyncpg://querywise:querywise_dev@localhost:5432/querywise` | App metadata DB |
-| `ENCRYPTION_KEY` | `dev-encryption-key-change-in-production` | Fernet key for connection strings |
-| `DEFAULT_LLM_PROVIDER` | `anthropic` | LLM provider (`anthropic`, `openai`, `ollama`) |
+| `ENCRYPTION_KEY` | `dev-encryption-key-change-in-production` | Fernet key for connection strings (used by the `env` secrets backend) |
+| `SECRETS_BACKEND` | `env` | Secrets backend for connection-string encryption (`env`/`aws`/`gcp`/`azure`/`vault`) |
+| `LOG_LEVEL` | `INFO` | Log level |
+| `LOG_FORMAT` | `console` | Log format (`console`, or `json` for log aggregation) |
+| `ENABLE_METRICS` | `true` | Expose Prometheus metrics at `GET /metrics` |
+| `JOB_BACKEND` | `inprocess` | Background job runner (`inprocess` asyncio, or `arq` Redis) |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis URL (used when `JOB_BACKEND=arq`) |
+| `RATE_LIMIT_ENABLED` | `true` | Enforce `MAX_QUERIES_PER_MINUTE` on `/query` endpoints |
+| `DEFAULT_LLM_PROVIDER` | `anthropic` | LLM provider (`anthropic`, `openai`, `ollama`, `azure_openai`) |
 | `DEFAULT_LLM_MODEL` | `claude-sonnet-4-20250514` | Default model for SQL generation |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI embedding model |
 | `CORS_ORIGINS` | `["http://localhost:5173"]` | Allowed CORS origins |
@@ -116,6 +123,10 @@ frontend/src/
 | `EMBEDDING_DIMENSION` | `1536` | Vector dimension (1536 for OpenAI, 768 for Ollama nomic-embed-text) |
 | `ANTHROPIC_API_KEY` | — | Required if using Anthropic |
 | `OPENAI_API_KEY` | — | Required if using OpenAI (completions + embeddings) |
+| `AZURE_OPENAI_ENDPOINT` | — | Azure OpenAI endpoint (required for `azure_openai` provider) |
+| `AZURE_OPENAI_API_KEY` | — | Azure OpenAI key |
+| `AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure OpenAI API version |
+| `AZURE_OPENAI_DEPLOYMENT` | — | Azure OpenAI embedding deployment name |
 
 ## Ollama (Local LLM)
 
@@ -196,3 +207,17 @@ If the embedding model is unavailable (not pulled, or Ollama is down), the query
 - **Services:** Business logic in `app/services/`, never in endpoints directly
 - **Knowledge:** Import text/HTML content, auto-detect HTML, section-aware chunking (450 words, 80 overlap), vector + keyword search for relevant chunks injected into LLM prompt. URL fetching server-side via `httpx`. Service in `app/services/knowledge_service.py`
 - **SQL safety:** Read-only transactions enforced at connector level, static SQL blocklist in `app/utils/sql_sanitizer.py` (includes BigQuery-specific `EXPORT DATA` / `LOAD DATA` and Databricks-specific `COPY INTO` / `OPTIMIZE` / `VACUUM` blocks)
+
+## Platform plumbing (Phase 0)
+
+Foundational layers added under `app/core/` and `app/jobs/`. All optional
+dependencies degrade gracefully — the app boots without `structlog` /
+`prometheus_client` installed.
+
+- **Secrets** (`app/core/secrets.py`): `SecretsProvider` ABC behind connection-string encryption. Default `env` backend = Fernet (preserves original behaviour); `aws`/`gcp`/`azure`/`vault` are registered seams (`register_secrets_backend`). `connection_service.py` calls `get_secrets_provider()`.
+- **Telemetry** (`app/core/telemetry.py`): `configure_logging()` (structlog→stdlib fallback, `console`/`json`), per-request `X-Request-ID` via `ObservabilityMiddleware`, Prometheus metrics at `GET /metrics` (`setup_metrics`). Request id flows into logs + `AppError` responses.
+- **Rate limiting** (`app/core/rate_limit.py`): in-memory `SlidingWindowRateLimiter` wired to `/query` endpoints via `install_rate_limiting` (enforces `MAX_QUERIES_PER_MINUTE`). Swap the store for Redis for multi-replica deploys.
+- **Jobs** (`app/jobs/`): `JobQueue` ABC + `InProcessJobQueue` (asyncio, default) with an `arq`/Redis seam. `launch_background_embeddings` submits through `get_job_queue()`.
+- **Health** (`app/api/v1/endpoints/health.py`): `GET /health/live` (process) and `GET /health/ready` (DB + job queue + LLM provider, 503 on failure) for K8s probes.
+- **LLM endpoints:** Azure OpenAI provider (`azure_openai`) added so the pipeline can run inside a customer VPC; registered in `provider_registry`.
+- **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). Optional deps: `pip install -e ".[observability,jobs]"`.

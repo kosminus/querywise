@@ -15,7 +15,20 @@ class Settings(BaseSettings):
 
     # Security
     encryption_key: str = "dev-encryption-key-change-in-production"
+    # Secrets backend for encrypting connection strings at rest:
+    # env (default, Fernet) | aws | gcp | azure | vault
+    secrets_backend: str = "env"
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    # Observability
+    log_level: str = "INFO"
+    log_format: str = "console"  # console | json (json for production/log aggregation)
+    enable_metrics: bool = True  # expose Prometheus /metrics
+    service_name: str = "querywise-backend"
+
+    # Background jobs
+    job_backend: str = "inprocess"  # inprocess (asyncio) | arq (Redis)
+    redis_url: str = "redis://localhost:6379/0"
 
     # Query defaults
     default_query_timeout_seconds: int = 30
@@ -32,8 +45,16 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:8b"
     ollama_embedding_model: str = "nomic-embed-text"
 
+    # Azure OpenAI settings (used when default_llm_provider = "azure_openai").
+    # Lets the whole pipeline run inside a customer VPC against Azure OpenAI.
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_api_version: str = "2024-10-21"
+    azure_openai_deployment: str | None = None
+
     # Rate limiting
     max_queries_per_minute: int = 30
+    rate_limit_enabled: bool = True
 
     # Context builder
     max_context_tables: int = 8

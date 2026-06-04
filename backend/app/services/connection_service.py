@@ -1,28 +1,23 @@
-import base64
-import hashlib
 import uuid
 
-from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.connectors.connector_registry import get_connector_class, get_or_create_connector, remove_connector
 from app.core.exceptions import NotFoundError
+from app.core.secrets import get_secrets_provider
 from app.db.models.connection import DatabaseConnection
 
-# Derive a stable Fernet key from the configured encryption key.
-# Fernet requires a 32-byte url-safe base64-encoded key.
-_key_bytes = hashlib.sha256(settings.encryption_key.encode()).digest()
-_fernet = Fernet(base64.urlsafe_b64encode(_key_bytes))
+# Encryption of connection strings is delegated to the configured secrets
+# backend (env/Fernet by default — see app.core.secrets).
 
 
 def _encrypt(value: str) -> str:
-    return _fernet.encrypt(value.encode()).decode()
+    return get_secrets_provider().encrypt(value)
 
 
 def _decrypt(value: str) -> str:
-    return _fernet.decrypt(value.encode()).decode()
+    return get_secrets_provider().decrypt(value)
 
 
 async def list_connections(db: AsyncSession) -> list[DatabaseConnection]:

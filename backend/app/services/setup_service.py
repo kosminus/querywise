@@ -688,11 +688,13 @@ async def _generate_embeddings_background(connection_id: uuid.UUID) -> None:
 
 
 def launch_background_embeddings(connection_id: uuid.UUID) -> None:
-    """Fire-and-forget background embedding generation."""
+    """Fire-and-forget background embedding generation via the job queue."""
+    from app.jobs import get_job_queue
     from app.services.embedding_progress import register_task
 
-    task = asyncio.create_task(
-        _generate_embeddings_background(connection_id),
+    task = get_job_queue().submit(
+        lambda: _generate_embeddings_background(connection_id),
         name=f"embed-{connection_id}",
     )
-    register_task(str(connection_id), task)
+    if isinstance(task, asyncio.Task):
+        register_task(str(connection_id), task)
