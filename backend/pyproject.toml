@@ -1,6 +1,6 @@
 [project]
 name = "querywise"
-version = "0.1.0"
+version = "2.0.0"
 description = "QueryWise — Natural language to SQL with a semantic metadata layer"
 requires-python = ">=3.11"
 dependencies = [
@@ -29,6 +29,16 @@ bigquery = [
 ]
 databricks = [
     "databricks-sql-connector[pyarrow]>=3.0",
+]
+observability = [
+    "structlog>=24.0",
+    "prometheus-client>=0.20",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-exporter-otlp-proto-http>=1.25",
+]
+jobs = [
+    "arq>=0.26",
+    "redis>=5.0",
 ]
 dev = [
     "pytest>=8.0",

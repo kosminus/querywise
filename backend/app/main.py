@@ -7,6 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
+from app.core.rate_limit import install_rate_limiting
+from app.core.telemetry import (
+    ObservabilityMiddleware,
+    configure_logging,
+    configure_tracing,
+    setup_metrics,
+)
 from app.db.session import engine
 
 logger = logging.getLogger("querywise")
@@ -29,12 +36,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    configure_logging()
+    configure_tracing()
+
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version="2.0.0",
         lifespan=lifespan,
     )
 
+    # Middleware runs in reverse order of registration; add observability last
+    # so it wraps everything (assigns the request id seen by all other layers).
+    install_rate_limiting(app, settings.api_prefix)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -42,8 +55,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(ObservabilityMiddleware)
 
     register_exception_handlers(app)
+    setup_metrics(app)
     app.include_router(api_router, prefix=settings.api_prefix)
 
     # Mount QueryWise as an MCP server at /mcp (streamable HTTP).

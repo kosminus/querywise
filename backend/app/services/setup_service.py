@@ -25,6 +25,7 @@ from app.db.models.knowledge import KnowledgeDocument
 from app.db.models.metric import MetricDefinition
 from app.db.models.schema_cache import CachedColumn, CachedTable
 from app.db.session import async_session_factory
+from app.jobs import get_job_queue, register_job
 from app.services import connection_service, schema_service
 
 logger = logging.getLogger("uvicorn.error")
@@ -687,12 +688,23 @@ async def _generate_embeddings_background(connection_id: uuid.UUID) -> None:
             )
 
 
+# Register the embedding generation job so both the in-process queue and the
+# arq worker can resolve it by name.
+register_job("generate_embeddings", _generate_embeddings_background)
+
+
 def launch_background_embeddings(connection_id: uuid.UUID) -> None:
-    """Fire-and-forget background embedding generation."""
+    """Fire-and-forget background embedding generation via the job queue."""
     from app.services.embedding_progress import register_task
 
-    task = asyncio.create_task(
-        _generate_embeddings_background(connection_id),
+    queue = get_job_queue()
+    task = queue.submit(
+        "generate_embeddings",
+        connection_id,
         name=f"embed-{connection_id}",
     )
-    register_task(str(connection_id), task)
+    # In-process progress tracking only applies when the job runs in this
+    # process; under the arq backend the job (and its progress) lives in the
+    # worker process.
+    if queue.backend_name == "inprocess" and isinstance(task, asyncio.Task):
+        register_task(str(connection_id), task)

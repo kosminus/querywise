@@ -9,12 +9,14 @@ def _register_defaults() -> None:
     if _PROVIDER_CLASSES:
         return
     from app.llm.providers.anthropic_provider import AnthropicProvider
+    from app.llm.providers.azure_openai_provider import AzureOpenAIProvider
     from app.llm.providers.ollama_provider import OllamaProvider
     from app.llm.providers.openai_provider import OpenAIProvider
 
     _PROVIDER_CLASSES[LLMProviderType.ANTHROPIC] = AnthropicProvider
     _PROVIDER_CLASSES[LLMProviderType.OPENAI] = OpenAIProvider
     _PROVIDER_CLASSES[LLMProviderType.OLLAMA] = OllamaProvider
+    _PROVIDER_CLASSES[LLMProviderType.AZURE_OPENAI] = AzureOpenAIProvider
 
 
 def register_provider(provider_type: LLMProviderType, cls: type[BaseLLMProvider]) -> None:

@@ -8,6 +8,7 @@ class LLMProviderType(str, Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     OLLAMA = "ollama"
+    AZURE_OPENAI = "azure_openai"
 
 
 @dataclass

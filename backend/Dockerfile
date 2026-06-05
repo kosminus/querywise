@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 COPY . .
-RUN pip install --no-cache-dir -e ".[llm,dev,bigquery,databricks]"
+RUN pip install --no-cache-dir -e ".[llm,dev,bigquery,databricks,observability,jobs]"
 
 
 EXPOSE 8000

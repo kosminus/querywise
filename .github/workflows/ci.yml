@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint · type · test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[llm,dev,observability]"
+
+      # Gating: the test suite must pass before any Phase 0+ refactor lands.
+      - name: Tests
+        run: pytest -q
+
+      # Advisory until the pre-existing lint/type debt is burned down.
+      # Remove `continue-on-error` once the codebase is clean.
+      - name: Lint (ruff)
+        run: ruff check .
+        continue-on-error: true
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+        continue-on-error: true
+
+      - name: Type check (mypy)
+        run: mypy app
+        continue-on-error: true
+
+  frontend:
+    name: Frontend (lint · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
