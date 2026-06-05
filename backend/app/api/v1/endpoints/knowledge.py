@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.v1.deps import require_connection_read, require_connection_write
 from app.api.v1.schemas.knowledge import (
     FetchUrlRequest,
     FetchUrlResponse,
@@ -13,6 +14,7 @@ from app.api.v1.schemas.knowledge import (
     KnowledgeDocumentDetail,
     KnowledgeDocumentResponse,
 )
+from app.core.auth import AuthContext
 from app.core.exceptions import NotFoundError
 from app.db.models.knowledge import KnowledgeDocument
 from app.db.session import get_db
@@ -31,6 +33,7 @@ router = APIRouter(tags=["knowledge"])
 )
 async def list_knowledge_documents(
     connection_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -49,6 +52,7 @@ async def list_knowledge_documents(
 async def create_knowledge_document(
     connection_id: uuid.UUID,
     body: KnowledgeDocumentCreate,
+    ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     doc = await import_document(
@@ -56,6 +60,7 @@ async def create_knowledge_document(
         connection_id=connection_id,
         title=body.title,
         content=body.content,
+        organization_id=ctx.organization_id,
         source_url=body.source_url,
     )
     return doc
@@ -68,6 +73,7 @@ async def create_knowledge_document(
 async def get_knowledge_document(
     connection_id: uuid.UUID,
     document_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -88,6 +94,7 @@ async def get_knowledge_document(
 async def delete_knowledge_document(
     connection_id: uuid.UUID,
     document_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     doc = await db.get(KnowledgeDocument, document_id)

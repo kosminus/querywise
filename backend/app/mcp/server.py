@@ -39,7 +39,7 @@ from app.db.models.sample_query import SampleQuery
 from app.db.models.schema_cache import CachedColumn, CachedTable
 from app.db.session import async_session_factory
 from app.semantic.context_builder import build_context
-from app.services import connection_service, query_service, schema_service
+from app.services import connection_service, identity_service, query_service, schema_service
 from app.services.embedding_service import (
     embed_glossary_term,
     embed_metric,
@@ -234,7 +234,8 @@ mcp = FastMCP(
 async def list_connections() -> list[dict]:
     """List configured database connections (id, name, type, limits)."""
     async with _session_scope() as db:
-        conns = await connection_service.list_connections(db)
+        ctx = await identity_service.system_context(db)
+        conns = await connection_service.list_connections(db, ctx)
         return [_conn_dict(c) for c in conns]
 
 
@@ -274,8 +275,10 @@ async def create_connection(
     with test_connection, then introspect_connection. Returns the new id.
     """
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await connection_service.create_connection(
             db,
+            ctx,
             name=name,
             connector_type=connector_type,
             connection_string=connection_string,
@@ -290,8 +293,9 @@ async def create_connection(
 async def test_connection(connection: Connection) -> dict:
     """Check that a connection can be reached and authenticated."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        ok, message = await connection_service.test_connection(db, conn.id)
+        ok, message = await connection_service.test_connection(db, conn.id, ctx)
         return {"success": ok, "message": message}
 
 
@@ -319,9 +323,10 @@ async def introspect_connection(
     Idempotent — re-running refreshes the cache.
     """
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
         cid = conn.id
-        counts = await schema_service.introspect_and_cache(db, cid)
+        counts = await schema_service.introspect_and_cache(db, cid, ctx)
     if generate_embeddings:
         launch_background_embeddings(cid)
     return {**counts, "embeddings_started": bool(generate_embeddings)}
@@ -331,8 +336,9 @@ async def introspect_connection(
 async def delete_connection(connection: Connection) -> dict:
     """Permanently delete a connection and all its cached schema + semantic metadata."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        await connection_service.delete_connection(db, conn.id)
+        await connection_service.delete_connection(db, conn.id, ctx)
         return {"deleted": True}
 
 
@@ -345,8 +351,9 @@ async def delete_connection(connection: Connection) -> dict:
 async def list_tables(connection: Connection) -> list[dict]:
     """List a connection's cached tables with their columns."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        tables = await schema_service.get_tables(db, conn.id)
+        tables = await schema_service.get_tables(db, conn.id, ctx)
         return [
             {
                 "id": str(t.id),
@@ -379,12 +386,13 @@ async def describe_table(
 ) -> dict:
     """Describe one cached table in detail, including its foreign keys."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        tables = await schema_service.get_tables(db, conn.id)
+        tables = await schema_service.get_tables(db, conn.id, ctx)
         match = next((t for t in tables if t.table_name == table_name), None)
         if not match:
             raise ValueError(f"Table '{table_name}' not found on '{conn.name}'.")
-        detail = await schema_service.get_table_detail(db, match.id)
+        detail = await schema_service.get_table_detail(db, match.id, ctx)
         return {
             "schema": detail.schema_name,
             "name": detail.table_name,
@@ -460,8 +468,9 @@ async def run_sql(
 ) -> dict:
     """Execute read-only SQL against the target database and return the rows."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        result = await query_service.execute_raw_sql(db, conn.id, sql)
+        result = await query_service.execute_raw_sql(db, conn.id, sql, ctx)
         return {
             "columns": result.get("columns"),
             "rows": result.get("rows"),
@@ -478,8 +487,9 @@ async def generate_sql(
 ) -> dict:
     """Translate a natural-language question into SQL without executing it."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        return await query_service.generate_sql_only(db, conn.id, question)
+        return await query_service.generate_sql_only(db, conn.id, question, ctx)
 
 
 @mcp.tool(annotations=ToolAnnotations(title="Ask (NL->answer)", **_READ_ONLY_EXTERNAL))
@@ -493,8 +503,9 @@ async def ask(
     results. Returns Markdown.
     """
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
-        res = await query_service.execute_nl_query(db, conn.id, question)
+        res = await query_service.execute_nl_query(db, conn.id, question, ctx)
         return _format_ask_result(res)
 
 
@@ -572,9 +583,12 @@ async def add_glossary_term(
 ) -> dict:
     """Define a business glossary term that maps business language to a SQL expression."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
         obj = GlossaryTerm(
             connection_id=conn.id,
+            organization_id=ctx.organization_id,
+            created_by_id=ctx.user_id,
             term=term,
             definition=definition,
             sql_expression=sql_expression,
@@ -672,9 +686,12 @@ async def add_metric(
     Use add_glossary_term for phrase-to-SQL mappings; use this for aggregate KPIs.
     """
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
         obj = MetricDefinition(
             connection_id=conn.id,
+            organization_id=ctx.organization_id,
+            created_by_id=ctx.user_id,
             metric_name=metric_name,
             display_name=display_name,
             sql_expression=sql_expression,
@@ -806,9 +823,12 @@ async def add_sample_query(
 ) -> dict:
     """Save an NL -> SQL example pair used as a few-shot to steer generation."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
         obj = SampleQuery(
             connection_id=conn.id,
+            organization_id=ctx.organization_id,
+            created_by_id=ctx.user_id,
             natural_language=natural_language,
             sql_query=sql_query,
             description=description,
@@ -868,12 +888,14 @@ async def add_knowledge(
 ) -> dict:
     """Import a knowledge document (text or HTML). Chunked and embedded for retrieval."""
     async with _session_scope() as db:
+        ctx = await identity_service.system_context(db)
         conn = await _resolve_connection(db, connection)
         doc = await import_document(
             db,
             connection_id=conn.id,
             title=title,
             content=content,
+            organization_id=ctx.organization_id,
             source_url=source_url,
         )
         return {"id": str(doc.id), "title": doc.title}

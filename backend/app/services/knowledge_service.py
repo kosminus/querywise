@@ -225,6 +225,7 @@ async def import_document(
     connection_id: uuid.UUID,
     title: str,
     content: str,
+    organization_id: uuid.UUID,
     source_url: str | None = None,
 ) -> KnowledgeDocument:
     """Import text or HTML content as a knowledge document with embedded chunks.
@@ -266,6 +267,7 @@ async def import_document(
 
     doc = KnowledgeDocument(
         connection_id=connection_id,
+        organization_id=organization_id,
         title=document_title,
         source_url=source_url,
         content=content,

@@ -61,6 +61,36 @@ class Settings(BaseSettings):
     max_queries_per_minute: int = 30
     rate_limit_enabled: bool = True
 
+    # Authentication & identity (Phase 1)
+    # Master switch for local dev: when true, every request is treated as a
+    # synthetic admin user — no login required. NEVER enable in production.
+    disable_auth: bool = False
+    # Auth provider for interactive login: local (password) | magic_link | oidc.
+    # `local` and `magic_link` are implemented; `oidc` is a registered seam.
+    auth_provider: str = "local"
+    # JWT signing — sessions are stateless HS256 tokens delivered as a cookie.
+    jwt_secret: str = "dev-jwt-secret-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_access_ttl_minutes: int = 60 * 12  # session lifetime
+    magic_link_ttl_minutes: int = 15  # magic-link token lifetime
+    # Session cookie delivery (HTTP-only; Secure should be true behind TLS).
+    auth_cookie_name: str = "qw_session"
+    auth_cookie_secure: bool = False  # set true in production (HTTPS only)
+    auth_cookie_samesite: str = "lax"  # lax | strict | none
+    auth_cookie_domain: str | None = None
+    # Default organization + first admin, created on boot (and in migration 004).
+    default_org_name: str = "Default Organization"
+    default_org_slug: str = "default"
+    default_workspace_name: str = "Default Workspace"
+    default_admin_email: str = "admin@querywise.local"
+    # When set, the bootstrapped admin gets this password (local login).
+    default_admin_password: str | None = None
+    # OIDC seam (not implemented yet — placeholders for the provider stub).
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    oidc_redirect_url: str | None = None
+
     # Context builder
     max_context_tables: int = 8
     max_sample_queries: int = 3

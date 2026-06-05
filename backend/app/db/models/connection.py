@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,19 @@ class DatabaseConnection(Base):
     __tablename__ = "database_connections"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Identity scoping (Phase 1). organization_id is SaaS-ready; workspace_id
+    # (a Team) is the isolation unit and the cascade root for all metadata.
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # Private connections are visible only to their owner within the workspace.
+    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     connector_type: Mapped[str] = mapped_column(String(50), nullable=False)
     # Connection string stored encrypted; handled at service layer

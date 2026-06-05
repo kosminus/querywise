@@ -10,6 +10,7 @@ from app.api.v1.schemas.schema import (
     TableDetailResponse,
     TableResponse,
 )
+from app.core.auth import AuthContext, get_org_context
 from app.db.session import get_db
 from app.services import schema_service
 from app.services.setup_service import launch_background_embeddings
@@ -23,9 +24,10 @@ router = APIRouter(tags=["schemas"])
 )
 async def introspect_connection(
     connection_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await schema_service.introspect_and_cache(db, connection_id)
+    result = await schema_service.introspect_and_cache(db, connection_id, ctx)
     launch_background_embeddings(connection_id)
     return IntrospectionResult(**result)
 
@@ -36,9 +38,10 @@ async def introspect_connection(
 )
 async def list_tables(
     connection_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ):
-    tables = await schema_service.get_tables(db, connection_id)
+    tables = await schema_service.get_tables(db, connection_id, ctx)
     return [
         TableResponse(
             id=t.id,
@@ -60,9 +63,10 @@ async def list_tables(
 )
 async def get_table_detail(
     table_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ):
-    table = await schema_service.get_table_detail(db, table_id)
+    table = await schema_service.get_table_detail(db, table_id, ctx)
 
     columns = [
         ColumnResponse(

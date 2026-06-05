@@ -1,11 +1,12 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.connectors.connector_registry import get_or_create_connector
+from app.core.auth import AuthContext
 from app.core.exceptions import NotFoundError
 from app.db.models.schema_cache import CachedColumn, CachedRelationship, CachedTable
 from app.services.connection_service import get_connection, get_decrypted_connection_string
@@ -14,9 +15,10 @@ from app.services.connection_service import get_connection, get_decrypted_connec
 async def introspect_and_cache(
     db: AsyncSession,
     connection_id: uuid.UUID,
+    ctx: AuthContext,
 ) -> dict[str, int]:
     """Introspect a target database and cache the schema metadata."""
-    conn = await get_connection(db, connection_id)
+    conn = await get_connection(db, connection_id, ctx, write=True)
     connection_string = get_decrypted_connection_string(conn)
 
     connector = await get_or_create_connector(
@@ -99,7 +101,7 @@ async def introspect_and_cache(
                 total_relationships += 1
 
     # Update last_introspected_at
-    conn.last_introspected_at = datetime.now(timezone.utc)
+    conn.last_introspected_at = datetime.now(UTC)
     await db.flush()
 
     return {
@@ -110,8 +112,10 @@ async def introspect_and_cache(
 
 
 async def get_tables(
-    db: AsyncSession, connection_id: uuid.UUID
+    db: AsyncSession, connection_id: uuid.UUID, ctx: AuthContext
 ) -> list[CachedTable]:
+    # Access check (raises if the connection isn't in the caller's workspace).
+    await get_connection(db, connection_id, ctx)
     result = await db.execute(
         select(CachedTable)
         .where(CachedTable.connection_id == connection_id)
@@ -122,7 +126,7 @@ async def get_tables(
 
 
 async def get_table_detail(
-    db: AsyncSession, table_id: uuid.UUID
+    db: AsyncSession, table_id: uuid.UUID, ctx: AuthContext
 ) -> CachedTable:
     result = await db.execute(
         select(CachedTable)
@@ -140,4 +144,6 @@ async def get_table_detail(
     table = result.scalar_one_or_none()
     if not table:
         raise NotFoundError("Table", str(table_id))
+    # Ensure the table's connection belongs to the caller's workspace.
+    await get_connection(db, table.connection_id, ctx)
     return table

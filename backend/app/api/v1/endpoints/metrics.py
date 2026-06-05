@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import require_connection_read, require_connection_write
 from app.api.v1.schemas.metric import MetricCreate, MetricResponse, MetricUpdate
+from app.core.auth import AuthContext
 from app.core.exceptions import NotFoundError
 from app.db.models.metric import MetricDefinition
 from app.db.session import get_db
@@ -19,6 +21,7 @@ router = APIRouter(tags=["metrics"])
 )
 async def list_metrics(
     connection_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -37,10 +40,13 @@ async def list_metrics(
 async def create_metric(
     connection_id: uuid.UUID,
     body: MetricCreate,
+    ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     metric = MetricDefinition(
         connection_id=connection_id,
+        organization_id=ctx.organization_id,
+        created_by_id=ctx.user_id,
         **body.model_dump(),
     )
     db.add(metric)
@@ -59,6 +65,7 @@ async def create_metric(
 async def get_metric(
     connection_id: uuid.UUID,
     metric_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     metric = await db.get(MetricDefinition, metric_id)
@@ -75,6 +82,7 @@ async def update_metric(
     connection_id: uuid.UUID,
     metric_id: uuid.UUID,
     body: MetricUpdate,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     metric = await db.get(MetricDefinition, metric_id)
@@ -99,6 +107,7 @@ async def update_metric(
 async def delete_metric(
     connection_id: uuid.UUID,
     metric_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     metric = await db.get(MetricDefinition, metric_id)

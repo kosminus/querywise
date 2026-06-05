@@ -20,6 +20,16 @@ class ValidationError(AppError):
         super().__init__(message, status_code=422)
 
 
+class AuthenticationError(AppError):
+    def __init__(self, message: str = "Not authenticated"):
+        super().__init__(message, status_code=401)
+
+
+class AuthorizationError(AppError):
+    def __init__(self, message: str = "Not authorized"):
+        super().__init__(message, status_code=403)
+
+
 class SQLSafetyError(AppError):
     def __init__(self, message: str):
         super().__init__(f"SQL safety violation: {message}", status_code=403)
