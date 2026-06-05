@@ -9,6 +9,7 @@ from app.api.v1.schemas.connection import (
     ConnectionTestResult,
     ConnectionUpdate,
 )
+from app.core.auth import AuthContext, get_org_context
 from app.db.session import get_db
 from app.services import connection_service
 
@@ -16,8 +17,11 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 
 @router.get("", response_model=list[ConnectionResponse])
-async def list_connections(db: AsyncSession = Depends(get_db)):
-    connections = await connection_service.list_connections(db)
+async def list_connections(
+    ctx: AuthContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+):
+    connections = await connection_service.list_connections(db, ctx)
     return [
         ConnectionResponse(
             id=c.id,
@@ -37,9 +41,14 @@ async def list_connections(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=ConnectionResponse, status_code=201)
-async def create_connection(body: ConnectionCreate, db: AsyncSession = Depends(get_db)):
+async def create_connection(
+    body: ConnectionCreate,
+    ctx: AuthContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+):
     conn = await connection_service.create_connection(
         db,
+        ctx,
         name=body.name,
         connector_type=body.connector_type,
         connection_string=body.connection_string,
@@ -63,8 +72,12 @@ async def create_connection(body: ConnectionCreate, db: AsyncSession = Depends(g
 
 
 @router.get("/{connection_id}", response_model=ConnectionResponse)
-async def get_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    conn = await connection_service.get_connection(db, connection_id)
+async def get_connection(
+    connection_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+):
+    conn = await connection_service.get_connection(db, connection_id, ctx)
     return ConnectionResponse(
         id=conn.id,
         name=conn.name,
@@ -84,10 +97,11 @@ async def get_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(ge
 async def update_connection(
     connection_id: uuid.UUID,
     body: ConnectionUpdate,
+    ctx: AuthContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ):
     conn = await connection_service.update_connection(
-        db, connection_id, **body.model_dump(exclude_none=True)
+        db, connection_id, ctx, **body.model_dump(exclude_none=True)
     )
     return ConnectionResponse(
         id=conn.id,
@@ -105,11 +119,19 @@ async def update_connection(
 
 
 @router.delete("/{connection_id}", status_code=204)
-async def delete_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    await connection_service.delete_connection(db, connection_id)
+async def delete_connection(
+    connection_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+):
+    await connection_service.delete_connection(db, connection_id, ctx)
 
 
 @router.post("/{connection_id}/test", response_model=ConnectionTestResult)
-async def test_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    success, message = await connection_service.test_connection(db, connection_id)
+async def test_connection(
+    connection_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+):
+    success, message = await connection_service.test_connection(db, connection_id, ctx)
     return ConnectionTestResult(success=success, message=message)

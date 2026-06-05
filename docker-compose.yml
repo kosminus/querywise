@@ -45,6 +45,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://querywise:querywise_dev@app-db:5432/querywise
       ENVIRONMENT: development
       PYTHONPATH: /app
+      # Phase 1 auth is enforced once migration 004 runs. The pre-auth frontend
+      # has no login flow yet, so keep the dev escape hatch on (every request
+      # acts as the default admin). Remove this once the Phase 1 frontend lands.
+      DISABLE_AUTH: "true"
       # OLLAMA_BASE_URL comes from .env:
       #   host.docker.internal:11434 = native Ollama on host (default, GPU-accelerated on macOS)
       #   ollama:11434              = Docker Ollama (CPU-only, use with --profile ollama-docker)

@@ -377,7 +377,7 @@ managed-SaaS fleet but is **not** used to share one DB across customers today.
 | Phase | Status | Reference |
 |---|---|---|
 | **0** — Production hardening & async foundation | ✅ Implemented | PR #7 (→ v2.0.0) |
-| **1** — Identity, teams & ownership | ⬜ Not started | — |
+| **1** — Identity, teams & ownership | ✅ Backend implemented (frontend pending) | migration `004`; OIDC is a registered seam (magic-link + local live) |
 | **2** — Durable analytics artifacts | ⬜ Not started | — |
 | **3** — Discovery, catalog & trust | ⬜ Not started | — |
 | **4** — Scheduling, distribution & governance | ⬜ Not started | — |

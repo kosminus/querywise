@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.connectors.connector_registry import get_or_create_connector
+from app.core.auth import AuthContext
 from app.core.exceptions import AppError, SQLSafetyError
 from app.core.telemetry import start_span
 from app.db.models.query_history import QueryExecution
@@ -22,6 +23,7 @@ async def execute_nl_query(
     db: AsyncSession,
     connection_id: uuid.UUID,
     question: str,
+    ctx: AuthContext,
 ) -> dict:
     """Full pipeline: NL question → SQL → execute → interpret.
 
@@ -36,7 +38,7 @@ async def execute_nl_query(
 
     Returns dict with all response fields.
     """
-    conn = await get_connection(db, connection_id)
+    conn = await get_connection(db, connection_id, ctx)
     connection_string = get_decrypted_connection_string(conn)
 
     # Step 1: Build context
@@ -154,7 +156,9 @@ async def execute_nl_query(
         else:
             # Save failed execution to history
             execution = QueryExecution(
+                organization_id=ctx.organization_id,
                 connection_id=connection_id,
+                user_id=ctx.user_id,
                 natural_language=question,
                 generated_sql=generated_sql,
                 final_sql=final_sql,
@@ -189,7 +193,9 @@ async def execute_nl_query(
 
     # Step 7: Save to history
     execution = QueryExecution(
+        organization_id=ctx.organization_id,
         connection_id=connection_id,
+        user_id=ctx.user_id,
         natural_language=question,
         generated_sql=generated_sql,
         final_sql=final_sql,
@@ -229,9 +235,10 @@ async def generate_sql_only(
     db: AsyncSession,
     connection_id: uuid.UUID,
     question: str,
+    ctx: AuthContext,
 ) -> dict:
     """Generate SQL without executing it."""
-    conn = await get_connection(db, connection_id)
+    conn = await get_connection(db, connection_id, ctx)
     context = await build_context(db, connection_id, question, dialect=conn.connector_type)
     provider, llm_config = route(question)
     composer = QueryComposerAgent(provider, llm_config)
@@ -250,6 +257,7 @@ async def execute_raw_sql(
     db: AsyncSession,
     connection_id: uuid.UUID,
     sql: str,
+    ctx: AuthContext,
     original_question: str | None = None,
 ) -> dict:
     """Execute user-provided SQL directly (no LLM generation).
@@ -266,7 +274,7 @@ async def execute_raw_sql(
     if safety_issues:
         raise SQLSafetyError("; ".join(safety_issues))
 
-    conn = await get_connection(db, connection_id)
+    conn = await get_connection(db, connection_id, ctx)
     connection_string = get_decrypted_connection_string(conn)
 
     # Step 2: Execute query
@@ -283,7 +291,9 @@ async def execute_raw_sql(
     except Exception as e:
         # Save failed execution to history
         execution = QueryExecution(
+            organization_id=ctx.organization_id,
             connection_id=connection_id,
+            user_id=ctx.user_id,
             natural_language=original_question or "(manual SQL)",
             generated_sql=None,
             final_sql=sql,
@@ -325,7 +335,9 @@ async def execute_raw_sql(
 
     # Step 4: Save to history
     execution = QueryExecution(
+        organization_id=ctx.organization_id,
         connection_id=connection_id,
+        user_id=ctx.user_id,
         natural_language=question_text,
         generated_sql=None,
         final_sql=sql,

@@ -12,10 +12,16 @@ class QueryExecution(Base):
     __tablename__ = "query_executions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
     connection_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("database_connections.id"), nullable=False
     )
-    user_id: Mapped[str | None] = mapped_column(String(255))
+    # Promoted from a free-text string to a real FK (Phase 1).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
     natural_language: Mapped[str] = mapped_column(Text, nullable=False)
     generated_sql: Mapped[str | None] = mapped_column(Text)
     final_sql: Mapped[str | None] = mapped_column(Text)

@@ -129,6 +129,17 @@ frontend/src/
 | `AZURE_OPENAI_API_KEY` | — | Azure OpenAI key |
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure OpenAI API version |
 | `AZURE_OPENAI_DEPLOYMENT` | — | Azure OpenAI embedding deployment name |
+| `DISABLE_AUTH` | `false` | Local-dev escape hatch — treat every request as the default admin (no login). **Never enable in production** |
+| `AUTH_PROVIDER` | `local` | Interactive login backend: `local` (password + magic-link), `magic_link`, or `oidc` (registered seam, not yet implemented) |
+| `JWT_SECRET` | `dev-jwt-secret-change-in-production` | HS256 signing secret for session + magic-link JWTs |
+| `JWT_ACCESS_TTL_MINUTES` | `720` | Session lifetime (minutes) |
+| `MAGIC_LINK_TTL_MINUTES` | `15` | Magic-link token lifetime (minutes) |
+| `AUTH_COOKIE_NAME` | `qw_session` | Session cookie name (HTTP-only) |
+| `AUTH_COOKIE_SECURE` | `false` | Set `true` behind TLS (HTTPS-only cookie) |
+| `AUTH_COOKIE_SAMESITE` | `lax` | Session cookie SameSite (`lax`/`strict`/`none`) |
+| `DEFAULT_ORG_SLUG` | `default` | Slug of the auto-created default organization |
+| `DEFAULT_ADMIN_EMAIL` | `admin@querywise.local` | Bootstrapped admin user (created on boot + in migration 004) |
+| `DEFAULT_ADMIN_PASSWORD` | — | If set, the bootstrapped admin gets this local-login password |
 
 ## Ollama (Local LLM)
 
@@ -223,3 +234,15 @@ dependencies degrade gracefully — the app boots without `structlog` /
 - **Health** (`app/api/v1/endpoints/health.py`): `GET /health/live` (process) and `GET /health/ready` (DB + job queue + LLM provider, 503 on failure) for K8s probes.
 - **LLM endpoints:** Azure OpenAI provider (`azure_openai`) added so the pipeline can run inside a customer VPC; registered in `provider_registry`.
 - **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). Optional deps: `pip install -e ".[observability,jobs]"`.
+
+## Identity & auth (Phase 1)
+
+Real users, teams, roles, and ownership. Single-tenant per deployment; isolation is by `workspace_id` (a `Team`) within the auto-created default `Organization`. `organization_id` is carried on every core table so a future managed-SaaS fleet needs no migration. Migration `004` creates the identity tables, seeds the default org/workspace/admin, backfills all existing rows, and promotes the free-text `created_by`/`user_id` columns to real `User` FKs.
+
+- **Identity models** (`app/db/models/`): `Organization`, `User`, `Team` (= workspace), `Membership` (role `admin|editor|viewer`, ranked in `ROLE_RANK`), `ApiKey` (only the SHA-256 hash stored).
+- **Primitives** (`app/core/security.py`): PBKDF2 password hashing (stdlib), HS256 JWTs with a `purpose` claim (`session` / `magic_link`), and API-key gen/hash. Dependency-light + unit-tested.
+- **Request plumbing** (`app/core/auth.py`): `get_current_user` (API key → Bearer → HTTP-only `qw_session` cookie), `get_org_context` → `AuthContext` (active workspace via `X-Workspace-Id` header, else earliest membership), and `require_role(...)`. `DISABLE_AUTH=true` short-circuits to the bootstrapped admin for local dev.
+- **Login** (`app/services/auth_service.py`, `app/api/v1/endpoints/auth.py`): password + magic-link, both issuing a session-cookie JWT. Magic-link delivery (email/Slack) lands in Phase 4 — the token is logged and, outside production, returned by `POST /auth/magic-link`. `app/core/auth_providers.py` is a name-keyed seam (`local`/`magic_link`/`oidc`); **OIDC is registered but not implemented**.
+- **AuthZ in services** (per the existing convention): `connection_service` scopes by org+workspace and enforces role; metadata endpoints authorize through the connection (the cascade root) via `app/api/v1/deps.py` (`require_connection_read/write`, `require_column_read/write`). Non-request entry points — startup auto-setup, the MCP server, the seed script via `DISABLE_AUTH` — act under `identity_service.system_context()` (admin in the default workspace).
+- **Endpoints:** `/auth/*` (login, register, magic-link request/verify, logout, me, providers), `/teams` + `/teams/{id}/members` (admin-managed), `/api-keys` (per-user, plaintext shown once).
+- **Heads-up:** once auth is enforced, the current (pre-auth) frontend gets 401s — run with `DISABLE_AUTH=true` until the Phase 1 frontend (login + auth context + workspace switcher) lands.

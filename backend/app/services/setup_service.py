@@ -472,12 +472,19 @@ async def auto_setup_sample_db() -> None:
         try:
             async with async_session_factory() as db:
                 try:
-                    connection = await _ensure_connection(db)
+                    # Auto-setup acts on behalf of the deployment (no request
+                    # user), so it runs under the default org/workspace admin.
+                    from app.services import identity_service
+
+                    ctx = await identity_service.system_context(db)
+                    org_id = ctx.organization_id
+
+                    connection = await _ensure_connection(db, ctx)
                     connection_id = connection.id
 
                     if connection.last_introspected_at is None:
                         logger.info("Auto-setup: introspecting schema...")
-                        await schema_service.introspect_and_cache(db, connection_id)
+                        await schema_service.introspect_and_cache(db, connection_id, ctx)
                         await db.commit()
                         # Refresh to get updated last_introspected_at
                         await db.refresh(connection)
@@ -485,10 +492,10 @@ async def auto_setup_sample_db() -> None:
                     else:
                         logger.info("Auto-setup: schema already introspected, skipping")
 
-                    await _seed_glossary(db, connection_id)
-                    await _seed_metrics(db, connection_id)
+                    await _seed_glossary(db, connection_id, org_id)
+                    await _seed_metrics(db, connection_id, org_id)
                     await _seed_dictionary(db, connection_id)
-                    await _seed_knowledge(db, connection_id)
+                    await _seed_knowledge(db, connection_id, org_id)
 
                     await db.commit()
                     logger.info(
@@ -515,7 +522,7 @@ async def auto_setup_sample_db() -> None:
                 )
 
 
-async def _ensure_connection(db):
+async def _ensure_connection(db, ctx):
     """Create or find the sample DB connection."""
     result = await db.execute(
         select(DatabaseConnection).where(DatabaseConnection.name == CONNECTION_NAME)
@@ -529,6 +536,7 @@ async def _ensure_connection(db):
     logger.info("Auto-setup: creating connection '%s'...", CONNECTION_NAME)
     connection = await connection_service.create_connection(
         db,
+        ctx,
         name=CONNECTION_NAME,
         connector_type="postgresql",
         connection_string=settings.sample_db_connection_string,
@@ -539,7 +547,7 @@ async def _ensure_connection(db):
     return connection
 
 
-async def _seed_glossary(db, connection_id: uuid.UUID) -> None:
+async def _seed_glossary(db, connection_id: uuid.UUID, org_id: uuid.UUID) -> None:
     """Seed glossary terms if none exist."""
     count = await db.scalar(
         select(func.count()).select_from(GlossaryTerm).where(
@@ -552,11 +560,11 @@ async def _seed_glossary(db, connection_id: uuid.UUID) -> None:
 
     logger.info("Auto-setup: seeding %d glossary terms...", len(GLOSSARY_TERMS))
     for term_data in GLOSSARY_TERMS:
-        db.add(GlossaryTerm(connection_id=connection_id, **term_data))
+        db.add(GlossaryTerm(connection_id=connection_id, organization_id=org_id, **term_data))
     await db.flush()
 
 
-async def _seed_metrics(db, connection_id: uuid.UUID) -> None:
+async def _seed_metrics(db, connection_id: uuid.UUID, org_id: uuid.UUID) -> None:
     """Seed metric definitions if none exist."""
     count = await db.scalar(
         select(func.count()).select_from(MetricDefinition).where(
@@ -569,7 +577,7 @@ async def _seed_metrics(db, connection_id: uuid.UUID) -> None:
 
     logger.info("Auto-setup: seeding %d metrics...", len(METRICS))
     for metric_data in METRICS:
-        db.add(MetricDefinition(connection_id=connection_id, **metric_data))
+        db.add(MetricDefinition(connection_id=connection_id, organization_id=org_id, **metric_data))
     await db.flush()
 
 
@@ -617,7 +625,7 @@ async def _seed_dictionary(db, connection_id: uuid.UUID) -> None:
     logger.info("Auto-setup: seeded %d dictionary entries", total)
 
 
-async def _seed_knowledge(db, connection_id: uuid.UUID) -> None:
+async def _seed_knowledge(db, connection_id: uuid.UUID, org_id: uuid.UUID) -> None:
     """Seed a sample knowledge document if none exist."""
     count = await db.scalar(
         select(func.count()).select_from(KnowledgeDocument).where(
@@ -638,6 +646,7 @@ async def _seed_knowledge(db, connection_id: uuid.UUID) -> None:
         connection_id=connection_id,
         title=KNOWLEDGE_DOCUMENT["title"],
         content=KNOWLEDGE_DOCUMENT["content"],
+        organization_id=org_id,
         source_url=KNOWLEDGE_DOCUMENT["source_url"],
     )
     logger.info(

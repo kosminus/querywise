@@ -4,11 +4,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import require_connection_read, require_connection_write
 from app.api.v1.schemas.glossary import (
     GlossaryTermCreate,
     GlossaryTermResponse,
     GlossaryTermUpdate,
 )
+from app.core.auth import AuthContext
 from app.core.exceptions import NotFoundError
 from app.db.models.glossary import GlossaryTerm
 from app.db.session import get_db
@@ -23,6 +25,7 @@ router = APIRouter(tags=["glossary"])
 )
 async def list_glossary_terms(
     connection_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -41,10 +44,13 @@ async def list_glossary_terms(
 async def create_glossary_term(
     connection_id: uuid.UUID,
     body: GlossaryTermCreate,
+    ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     term = GlossaryTerm(
         connection_id=connection_id,
+        organization_id=ctx.organization_id,
+        created_by_id=ctx.user_id,
         term=body.term,
         definition=body.definition,
         sql_expression=body.sql_expression,
@@ -68,6 +74,7 @@ async def create_glossary_term(
 async def get_glossary_term(
     connection_id: uuid.UUID,
     term_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     term = await db.get(GlossaryTerm, term_id)
@@ -84,6 +91,7 @@ async def update_glossary_term(
     connection_id: uuid.UUID,
     term_id: uuid.UUID,
     body: GlossaryTermUpdate,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     term = await db.get(GlossaryTerm, term_id)
@@ -108,6 +116,7 @@ async def update_glossary_term(
 async def delete_glossary_term(
     connection_id: uuid.UUID,
     term_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     term = await db.get(GlossaryTerm, term_id)

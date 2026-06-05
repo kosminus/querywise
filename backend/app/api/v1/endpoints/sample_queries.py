@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import require_connection_read, require_connection_write
+from app.core.auth import AuthContext
 from app.core.exceptions import NotFoundError
 from app.db.models.sample_query import SampleQuery
 from app.db.session import get_db
@@ -49,6 +51,7 @@ class SampleQueryResponse(BaseModel):
 )
 async def list_sample_queries(
     connection_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -67,9 +70,15 @@ async def list_sample_queries(
 async def create_sample_query(
     connection_id: uuid.UUID,
     body: SampleQueryCreate,
+    ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
-    sq = SampleQuery(connection_id=connection_id, **body.model_dump())
+    sq = SampleQuery(
+        connection_id=connection_id,
+        organization_id=ctx.organization_id,
+        created_by_id=ctx.user_id,
+        **body.model_dump(),
+    )
     db.add(sq)
     await db.flush()
     try:
@@ -87,6 +96,7 @@ async def update_sample_query(
     connection_id: uuid.UUID,
     sq_id: uuid.UUID,
     body: SampleQueryUpdate,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     sq = await db.get(SampleQuery, sq_id)
@@ -109,6 +119,7 @@ async def update_sample_query(
 async def delete_sample_query(
     connection_id: uuid.UUID,
     sq_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     sq = await db.get(SampleQuery, sq_id)
