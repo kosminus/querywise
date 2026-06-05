@@ -1,5 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { LoginPage } from './pages/LoginPage';
+import { MagicLinkVerifyPage } from './pages/MagicLinkVerifyPage';
 import { QueryPage } from './pages/QueryPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { GlossaryPage } from './pages/GlossaryPage';
@@ -11,15 +14,22 @@ import { HistoryPage } from './pages/HistoryPage';
 export default function App() {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Navigate to="/query" replace />} />
-        <Route path="/query" element={<QueryPage />} />
-        <Route path="/connections" element={<ConnectionsPage />} />
-        <Route path="/glossary" element={<GlossaryPage />} />
-        <Route path="/metrics" element={<MetricsPage />} />
-        <Route path="/dictionary" element={<DictionaryPage />} />
-        <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/history" element={<HistoryPage />} />
+      {/* Public */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login/verify" element={<MagicLinkVerifyPage />} />
+
+      {/* Authenticated */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Navigate to="/query" replace />} />
+          <Route path="/query" element={<QueryPage />} />
+          <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/glossary" element={<GlossaryPage />} />
+          <Route path="/metrics" element={<MetricsPage />} />
+          <Route path="/dictionary" element={<DictionaryPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/history" element={<HistoryPage />} />
+        </Route>
       </Route>
     </Routes>
   );
