@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -33,13 +35,20 @@ async def readiness():
     # App database — critical.
     checks["database"] = await _check_database()
 
-    # Background job queue — critical (embeddings, future scheduling).
-    checks["jobs"] = _check_jobs()
+    # Background job queue — critical (embeddings, future scheduling). For the
+    # arq backend this pings Redis, so a misconfigured queue fails readiness
+    # instead of silently dropping enqueued jobs later.
+    checks["jobs"] = await _check_jobs()
 
-    # LLM + embedding providers — registered/configured, not a live call.
+    # Chat LLM provider used for SQL generation.
     checks["llm_provider"] = _check_llm_provider()
 
-    critical = ("database", "jobs", "llm_provider")
+    # Embedding provider — distinct from the chat provider (e.g. the default
+    # Anthropic setup resolves embeddings to OpenAI). Embedding generation
+    # fails without its own credentials, so check it explicitly.
+    checks["embedding_provider"] = _check_embedding_provider()
+
+    critical = ("database", "jobs", "llm_provider", "embedding_provider")
     healthy = all(checks[name]["status"] == "ok" for name in critical)
 
     body = {"status": "ok" if healthy else "unavailable", "checks": checks}
@@ -55,21 +64,55 @@ async def _check_database() -> dict:
         return {"status": "error", "detail": str(e)}
 
 
-def _check_jobs() -> dict:
+async def _check_jobs() -> dict:
     try:
         from app.jobs import get_job_queue
 
-        return {"status": "ok", "backend": get_job_queue().backend_name}
+        queue = get_job_queue()
+        ok, detail = await queue.check()
+        result = {"status": "ok" if ok else "error", "backend": queue.backend_name}
+        if detail:
+            result["detail"] = detail
+        return result
     except Exception as e:  # noqa: BLE001
         return {"status": "error", "detail": str(e)}
+
+
+def _credential_issue(provider_type: str) -> str | None:
+    """Return a human-readable reason if the provider's credential is absent."""
+    if provider_type == "openai":
+        return None if os.environ.get("OPENAI_API_KEY") else "OPENAI_API_KEY not set"
+    if provider_type == "anthropic":
+        return None if os.environ.get("ANTHROPIC_API_KEY") else "ANTHROPIC_API_KEY not set"
+    if provider_type == "azure_openai":
+        has_key = settings.azure_openai_api_key or os.environ.get("AZURE_OPENAI_API_KEY")
+        return None if has_key else "AZURE_OPENAI_API_KEY not set"
+    # ollama (and any future local provider) needs no API key.
+    return None
+
+
+def _provider_status(provider) -> dict:
+    ptype = provider.provider_type.value
+    issue = _credential_issue(ptype)
+    if issue:
+        return {"status": "error", "provider": ptype, "detail": issue}
+    return {"status": "ok", "provider": ptype}
 
 
 def _check_llm_provider() -> dict:
     try:
         from app.llm.provider_registry import get_provider
 
-        get_provider(settings.default_llm_provider)
-        return {"status": "ok", "provider": settings.default_llm_provider}
+        return _provider_status(get_provider(settings.default_llm_provider))
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "detail": str(e)}
+
+
+def _check_embedding_provider() -> dict:
+    try:
+        from app.llm.provider_registry import get_embedding_provider
+
+        return _provider_status(get_embedding_provider())
     except Exception as e:  # noqa: BLE001
         return {"status": "error", "detail": str(e)}
 

@@ -1,6 +1,22 @@
 import pytest
 
-from app.core.rate_limit import SlidingWindowRateLimiter
+from app.core.rate_limit import SlidingWindowRateLimiter, path_in_scope
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("/api/v1/query", True),
+        ("/api/v1/query/execute-sql", True),
+        ("/api/v1/query/sql-only", True),
+        # Sibling routes must NOT be rate limited as if they were queries.
+        ("/api/v1/query-history", False),
+        ("/api/v1/query-history/123", False),
+        ("/api/v1/connections", False),
+    ],
+)
+def test_path_in_scope(path, expected):
+    assert path_in_scope(path, "/api/v1/query") is expected
 
 
 async def test_allows_up_to_limit():

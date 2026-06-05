@@ -48,6 +48,15 @@ class SlidingWindowRateLimiter:
             return True, self.max_requests - len(hits), 0.0
 
 
+def path_in_scope(path: str, prefix: str) -> bool:
+    """True if ``path`` is the prefix itself or a child of it.
+
+    Uses a segment-aware match so the query-execution prefix (``/api/v1/query``)
+    does not accidentally also limit sibling routes like ``/api/v1/query-history``.
+    """
+    return path == prefix or path.startswith(prefix + "/")
+
+
 def _client_key(request: Request) -> str:
     api_key = request.headers.get("x-api-key")
     if api_key:
@@ -68,7 +77,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._path_prefix = path_prefix
 
     async def dispatch(self, request: Request, call_next):
-        if not request.url.path.startswith(self._path_prefix):
+        if not path_in_scope(request.url.path, self._path_prefix):
             return await call_next(request)
 
         allowed, remaining, retry_after = await self._limiter.check(_client_key(request))

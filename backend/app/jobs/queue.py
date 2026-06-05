@@ -33,6 +33,14 @@ class JobQueue(ABC):
         backends) or ``None``.
         """
 
+    async def check(self) -> tuple[bool, str | None]:
+        """Readiness check for the backend. Returns ``(ok, detail)``.
+
+        Default backends with no external dependency are always ready; backends
+        that depend on external infrastructure (e.g. Redis) override this.
+        """
+        return True, None
+
 
 class InProcessJobQueue(JobQueue):
     """Runs jobs as asyncio tasks on the current event loop (default backend)."""
@@ -79,6 +87,15 @@ class ArqJobQueue(JobQueue):
             await pool.enqueue_job(job_name, *args)
         except Exception:  # noqa: BLE001 — surface via logs, don't crash the request loop
             logger.exception("Failed to enqueue job '%s' to arq/Redis", job_name)
+
+    async def check(self) -> tuple[bool, str | None]:
+        """Verify the arq dependency is importable and Redis is reachable."""
+        try:
+            pool = await self._get_pool()
+            await pool.ping()
+            return True, None
+        except Exception as e:  # noqa: BLE001 — report, don't raise from a probe
+            return False, str(e)
 
     async def _get_pool(self):
         if self._pool is None:

@@ -125,6 +125,24 @@ async def test_arq_submit_swallows_enqueue_errors(caplog):
     assert "Failed to enqueue" in caplog.text
 
 
+async def test_inprocess_check_is_ready():
+    ok, detail = await InProcessJobQueue().check()
+    assert ok is True
+    assert detail is None
+
+
+async def test_arq_check_reports_unreachable_redis():
+    queue = ArqJobQueue()
+
+    async def boom_pool():
+        raise ConnectionError("redis down")
+
+    queue._get_pool = boom_pool  # type: ignore[method-assign]
+    ok, detail = await queue.check()
+    assert ok is False
+    assert "redis down" in detail
+
+
 def test_embeddings_job_is_registered():
     # Importing setup_service (done transitively) registers the embeddings job.
     import app.services.setup_service  # noqa: F401
