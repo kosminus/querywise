@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     api_keys,
+    assistant,
     auth,
     connections,
     dictionary,
@@ -23,6 +24,7 @@ api_router.include_router(auth.router)
 api_router.include_router(teams.router)
 api_router.include_router(api_keys.router)
 api_router.include_router(query.router)
+api_router.include_router(assistant.router)
 api_router.include_router(connections.router)
 api_router.include_router(schemas.router)
 api_router.include_router(glossary.router)
