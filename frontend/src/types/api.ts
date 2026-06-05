@@ -163,3 +163,65 @@ export interface KnowledgeChunk {
 export interface KnowledgeDocumentDetail extends KnowledgeDocument {
   chunks: KnowledgeChunk[];
 }
+
+// --- Assistant ---
+
+export interface GlossaryDraft {
+  term: string;
+  definition: string;
+  sql_expression: string;
+  related_tables: string[];
+  related_columns: string[];
+}
+
+export interface MetricDraft {
+  metric_name: string;
+  display_name: string;
+  description: string;
+  sql_expression: string;
+  aggregation_type: string;
+  related_tables: string[];
+  dimensions: string[];
+}
+
+export interface DictionaryEntryDraft {
+  raw_value: string;
+  display_value: string;
+  description: string;
+}
+
+export interface DictionaryDraft {
+  column_id: string;
+  table_name: string;
+  column_name: string;
+  entries: DictionaryEntryDraft[];
+}
+
+export interface KnowledgeDraft {
+  title: string;
+  content: string;
+  source_url: string;
+}
+
+export interface SqlPreviewPayload {
+  sql: string;
+  explanation: string;
+}
+
+export type AssistantAction =
+  | { type: 'glossary_draft'; payload: GlossaryDraft }
+  | { type: 'metric_draft'; payload: MetricDraft }
+  | { type: 'dictionary_draft'; payload: DictionaryDraft }
+  | { type: 'knowledge_draft'; payload: KnowledgeDraft }
+  | { type: 'sql_preview'; payload: SqlPreviewPayload };
+
+export interface AssistantResponse {
+  message: string;
+  action?: AssistantAction | null;
+}
+
+export interface AssistantChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  action?: AssistantAction | null;
+}
