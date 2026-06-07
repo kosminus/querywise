@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-QueryWise — a text-to-SQL application with a semantic metadata layer. Users ask natural language questions, an LLM generates SQL using business context, executes against their database, and returns human-readable answers.
+QueryWise — a text-to-SQL application with a semantic metadata layer. Users ask natural language questions, an LLM generates SQL using business context, executes against their database, and returns human-readable answers. The conversational Assistant enables editing the semantic layer in plain language.
 
 ## Tech Stack
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy (async), asyncpg, pgvector, Alembic
 - **Frontend:** React 19, TypeScript, Vite, Mantine UI, React Query, React Router
 - **Databases:** PostgreSQL 16 with pgvector extension (app metadata), PostgreSQL 16 (sample/target DB), Google BigQuery, Databricks
-- **LLM:** Provider-agnostic (Anthropic Claude, OpenAI, Ollama)
+- **LLM:** Provider-agnostic (Anthropic Claude, OpenAI, Ollama, Azure OpenAI)
 
 ## How to Run
 

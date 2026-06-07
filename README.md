@@ -45,6 +45,10 @@ A full-stack application that translates natural language questions into SQL que
 - **Security by default** — read-only query execution, SQL blocklist, encrypted connection strings
 - **Query history** — full execution log with favorites, retry counts, token usage
 - **Schema introspection** — auto-discovers tables, columns, types, relationships from target databases
+- **Conversational Assistant** — chat panel for NL queries and semantic layer editing (glossary terms, metrics, dictionary entries, knowledge)
+- **Identity, teams, and ownership** — real users, roles (viewer/editor), teams, and workspace-based ownership
+- **Production hardening** — rate limiting, async job queue, OpenTelemetry tracing, structured logging, health probes
+
 
 ---
 
@@ -124,6 +128,18 @@ Works with both **Unity Catalog** (full INFORMATION_SCHEMA introspection includi
 3. Go to **Query** and ask a question like "What is the total ECL by stage?"
 
 > **Note:** Auto-setup is controlled by `AUTO_SETUP_SAMPLE_DB=true` (default). Set to `false` to disable. For manual seeding, use `python backend/scripts/seed_ifrs9_metadata.py`.
+
+
+
+### Using the Assistant Chat Panel
+
+QueryWise includes a **conversational Assistant** on the Query page. Ask questions in plain English or grow your semantic layer by talking:
+
+- **Ask data questions** — natural language queries use the semantic layer context to generate accurate SQL
+- **Add glossary terms** — describe business terms in plain language, the Assistant drafts them for review
+- **Create metrics, dictionary entries, and knowledge documents** — editors can add semantic layer definitions conversationally
+
+The Assistant only *drafts* definitions — every write uses the existing REST endpoints, so authorization and auto-embedding are unchanged.
 
 ### Using QueryWise from Claude / Cursor / Copilot / Codex (MCP)
 

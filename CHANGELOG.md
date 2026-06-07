@@ -39,6 +39,15 @@ product surface; all optional dependencies degrade gracefully).
 - Background embedding generation is submitted through the job queue rather than
   a bare `asyncio.create_task`.
 
+
+### Added (Phase 1 - Identity and Assistant)
+- **Identity, teams, and ownership** — real users, roles (viewer/editor), teams, and workspace-based ownership with proper RBAC
+- **Conversational Assistant** — chat panel for NL queries and semantic layer editing (glossary, metrics, dictionary, knowledge)
+- **Assistant router agent** — one structured-JSON LLM call per turn that classifies intent and extracts drafts
+- **Assistant service** — orchestrates conversational turns with proper authz and context building
+- **Assistant frontend component** — chat interface with draft confirmation cards for all semantic layer entities
+- **Assistant tests** — 33 unit tests for agent normalizers and service branching
+
 ## [1.0.0] - 2026-06-04
 
 First stable release: natural-language-to-SQL with a semantic metadata layer.
