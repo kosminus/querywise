@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// `??` (not `||`) so a deliberately-empty VITE_API_URL is honored: the prod
+// build sets it to "" so the SPA calls the API same-origin (/api/v1) behind
+// nginx. Unset (dev) still falls back to the local backend.
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 export const api = axios.create({
   baseURL: `${API_BASE}/api/v1`,

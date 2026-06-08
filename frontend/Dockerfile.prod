@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+#
+# Hardened, multi-stage production image for the QueryWise frontend.
+#   * builder stage produces the static Vite bundle
+#   * runtime stage serves it from the unprivileged nginx image (non-root,
+#     listens on 8080) and reverse-proxies the API to the backend
+#
+# Build:  docker build -f Dockerfile.prod -t querywise-frontend:prod .
+#
+# VITE_API_URL is baked in at build time. Leave it empty ("") so the SPA calls
+# the API same-origin (/api/v1) and nginx proxies it to the backend — the
+# build-once, configure-by-deployment shape. Override only for a split-origin
+# deployment where the API lives on a different host.
+
+# ---- builder ---------------------------------------------------------------
+FROM node:20-slim AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+ARG VITE_API_URL=""
+ENV VITE_API_URL=${VITE_API_URL}
+RUN npm run build
+
+# ---- runtime ---------------------------------------------------------------
+# Unprivileged nginx: master + workers run as uid 101, listens on 8080.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1

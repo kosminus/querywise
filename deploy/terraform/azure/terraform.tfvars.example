@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars and fill in. Keep secrets out of version control.
+# Authenticate first: `az login` (+ set ARM_SUBSCRIPTION_ID or subscription_id).
+
+location    = "eastus"
+name_prefix = "querywise-prod"
+# subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# Network — create a VNet with a delegated subnet + private DNS zone, or set
+# create_vnet = false and supply db_subnet_id + private_dns_zone_id.
+create_vnet = true
+
+# Postgres flexible server
+db_sku  = "GP_Standard_D2ds_v5"
+db_ha   = true
+
+# Redis
+redis_sku      = "Standard"
+redis_capacity = 1
+
+# REQUIRED — Fernet key. Generate with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+encryption_key = "CHANGE_ME"
+
+# LLM provider key(s).
+openai_api_key = "CHANGE_ME"

@@ -1,0 +1,30 @@
+QueryWise {{ .Chart.AppVersion }} deployed as release "{{ .Release.Name }}".
+
+Components:
+  backend   {{ include "querywise.backendImage" . }}  (uvicorn, {{ .Values.backend.uvicornWorkers }} workers/pod)
+  worker    arq background jobs
+  frontend  {{ include "querywise.frontendImage" . }}  (nginx edge / SPA)
+
+A pre-install/pre-upgrade hook ran `alembic upgrade head`{{ if not .Values.migrate.enabled }} (DISABLED — migrate.enabled=false){{ end }}.
+
+{{- if .Values.ingress.enabled }}
+
+Reach it at: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/
+{{- else }}
+
+Ingress is disabled. Port-forward the frontend to try it locally:
+  kubectl port-forward svc/{{ include "querywise.fullname" . }}-frontend 8080:{{ .Values.frontend.service.port }}
+  open http://localhost:8080
+{{- end }}
+
+{{- if not .Values.secrets.existingSecret }}
+{{- if not .Values.secrets.data.DATABASE_URL }}
+
+WARNING: secrets.data.DATABASE_URL is empty. Set DATABASE_URL and REDIS_URL
+(managed Postgres+pgvector / Redis), ENCRYPTION_KEY, and JWT_SECRET — or point
+secrets.existingSecret at an external-secrets-managed Secret.
+{{- end }}
+{{- end }}
+
+Check rollout:
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}

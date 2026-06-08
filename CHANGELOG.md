@@ -98,6 +98,36 @@ product surface; all optional dependencies degrade gracefully).
   so the lineage tests run (they `importorskip` past `sqlglot` when the extra is absent).
 - **Deferred to a later milestone:** column profiling (null rate / distinct counts / sample values).
 
+### Added (Packaging & deployability)
+- **Hardened production images** — multi-stage, non-root `backend/Dockerfile.prod`
+  (builder venv → slim runtime, `curl` healthcheck, prod extras only) and
+  `frontend/Dockerfile.prod` (Vite build → unprivileged nginx serving the SPA and
+  reverse-proxying `/api` + `/mcp`). The dev `Dockerfile`s are untouched.
+- **Production compose** (`docker-compose.prod.yml`) — pgvector app-db, Redis,
+  one-shot `migrate` service (gated so backend replicas never race on Alembic),
+  backend (uvicorn), arq `worker`, and the nginx edge. Configured by `.env.prod`
+  (`.env.prod.example` template).
+- **Helm chart** (`deploy/helm/querywise/`, EKS/GKE/AKS) — backend Deployment +
+  HPA + PDB, arq `worker`, frontend + PDB, path-based ingress (`/api`+`/mcp` →
+  backend, `/` → SPA), ServiceAccount, and a `pre-install`/`pre-upgrade`
+  migration hook Job. Secrets via a chart-created Secret or `existingSecret`
+  (external-secrets seam). Validated with `helm lint` + `kubeconform`.
+- **Terraform modules** (`deploy/terraform/{aws,gcp,azure}/`) — each provisions
+  the data plane + secrets in the customer's own account/VPC: managed Postgres 16
+  (pgvector) + managed Redis + a secret store with the assembled DSNs/keys +
+  object storage + optional networking + an identity/policy for external-secrets.
+  Compute (cluster) is intentionally separate state. `terraform validate`-clean.
+- **CI/CD** (`.github/workflows/`) — `deploy-validate.yml` lints the chart
+  (`kubeconform`) and Terraform (`fmt`/`validate`) on PRs; `release.yml` builds +
+  pushes both images to GHCR and deploys with Helm (`main` → staging, tag `v*` →
+  production, `--wait --atomic`) via a reusable composite action.
+- **Ops** (`deploy/ops/`) — `backup.sh`/`restore.sh` (encrypted `pg_dump`/
+  `pg_restore`), an in-cluster backup CronJob example, a DR runbook (backup/
+  restore, region rebuild, upgrade path, quarterly credential rotation), and a
+  production config reference.
+- **Deferred:** the managed-SaaS control plane (provisioning/billing/fleet
+  upgrades) — additive, since each tenant is already an isolated instance.
+
 ## [1.0.0] - 2026-06-04
 
 First stable release: natural-language-to-SQL with a semantic metadata layer.

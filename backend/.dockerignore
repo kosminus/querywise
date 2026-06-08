@@ -1,0 +1,16 @@
+# Keep the build context lean + avoid baking local state into the image.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+tests/
+.env
+.env.*
+*.sqlite
+*.log
+.git/
+.DS_Store

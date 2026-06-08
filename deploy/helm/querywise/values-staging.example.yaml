@@ -1,0 +1,36 @@
+# Example STAGING overlay. Copy to values-staging.yaml (committed, no secrets —
+# those come via external-secrets) and the Release workflow's staging deploy
+# picks it up automatically (.github/actions/helm-deploy resolves
+# values-<environment>.yaml). Image repo/tag are injected by CI via --set.
+
+backend:
+  replicaCount: 1
+  uvicornWorkers: 2
+  autoscaling:
+    enabled: false
+
+worker:
+  replicaCount: 1
+
+frontend:
+  replicaCount: 1
+
+ingress:
+  enabled: true
+  className: nginx
+  host: querywise.staging.yourcompany.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  tls:
+    enabled: true
+    secretName: querywise-staging-tls
+
+config:
+  ENVIRONMENT: staging
+  CORS_ORIGINS: '["https://querywise.staging.yourcompany.com"]'
+
+# Synced from the cloud secret store by external-secrets.
+secrets:
+  existingSecret: querywise-secrets
