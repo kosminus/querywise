@@ -31,6 +31,9 @@ bigquery = [
 databricks = [
     "databricks-sql-connector[pyarrow]>=3.0",
 ]
+export = [
+    "openpyxl>=3.1",
+]
 observability = [
     "structlog>=24.0",
     "prometheus-client>=0.20",

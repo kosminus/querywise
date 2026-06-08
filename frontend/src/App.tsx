@@ -7,6 +7,7 @@ import { QueryPage } from './pages/QueryPage';
 import { ConnectionsPage } from './pages/ConnectionsPage';
 import { GlossaryPage } from './pages/GlossaryPage';
 import { MetricsPage } from './pages/MetricsPage';
+import { SavedQueriesPage } from './pages/SavedQueriesPage';
 import { DictionaryPage } from './pages/DictionaryPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { HistoryPage } from './pages/HistoryPage';
@@ -23,6 +24,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/query" replace />} />
           <Route path="/query" element={<QueryPage />} />
+          <Route path="/saved-queries" element={<SavedQueriesPage />} />
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/glossary" element={<GlossaryPage />} />
           <Route path="/metrics" element={<MetricsPage />} />

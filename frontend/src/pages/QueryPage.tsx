@@ -178,7 +178,7 @@ export function QueryPage() {
         </Paper>
       )}
 
-      {result && <QueryResultView result={result} />}
+      {result && <QueryResultView result={result} connectionId={connectionId} />}
 
       <Divider label="or chat with the assistant" labelPosition="center" my="xs" />
 
