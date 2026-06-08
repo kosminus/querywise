@@ -43,6 +43,15 @@ export function useCloneSavedQuery(connectionId: string) {
   });
 }
 
+export function useTransitionSavedQueryStatus(connectionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, reason }: { id: string; status: string; reason?: string }) =>
+      savedQueriesApi.transitionStatus(connectionId, id, status, reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['savedQueries', connectionId] }),
+  });
+}
+
 export function useRunSavedQuery(connectionId: string) {
   return useMutation({
     mutationFn: ({

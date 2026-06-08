@@ -31,6 +31,10 @@ class GlossaryTermResponse(BaseModel):
     related_tables: list[str] | None
     related_columns: list[str] | None
     examples: list[str] | None
+    status: str
+    version: int
+    certified_by_id: UUID | None
+    certified_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

@@ -1,5 +1,11 @@
 import { api } from './client';
-import type { GlossaryTerm, MetricDefinition, DictionaryEntry } from '../types/api';
+import type {
+  GlossaryTerm,
+  LineageRef,
+  MetricDefinition,
+  DictionaryEntry,
+  SemanticVersion,
+} from '../types/api';
 
 export const glossaryApi = {
   list: (connectionId: string) =>
@@ -10,6 +16,14 @@ export const glossaryApi = {
     api.put<GlossaryTerm>(`/connections/${connectionId}/glossary/${termId}`, data).then(r => r.data),
   delete: (connectionId: string, termId: string) =>
     api.delete(`/connections/${connectionId}/glossary/${termId}`),
+  transitionStatus: (connectionId: string, termId: string, status: string, reason?: string) =>
+    api
+      .post<GlossaryTerm>(`/connections/${connectionId}/glossary/${termId}/status`, { status, reason })
+      .then(r => r.data),
+  versions: (connectionId: string, termId: string) =>
+    api
+      .get<SemanticVersion[]>(`/connections/${connectionId}/glossary/${termId}/versions`)
+      .then(r => r.data),
 };
 
 export const metricsApi = {
@@ -21,6 +35,18 @@ export const metricsApi = {
     api.put<MetricDefinition>(`/connections/${connectionId}/metrics/${metricId}`, data).then(r => r.data),
   delete: (connectionId: string, metricId: string) =>
     api.delete(`/connections/${connectionId}/metrics/${metricId}`),
+  transitionStatus: (connectionId: string, metricId: string, status: string, reason?: string) =>
+    api
+      .post<MetricDefinition>(`/connections/${connectionId}/metrics/${metricId}/status`, { status, reason })
+      .then(r => r.data),
+  versions: (connectionId: string, metricId: string) =>
+    api
+      .get<SemanticVersion[]>(`/connections/${connectionId}/metrics/${metricId}/versions`)
+      .then(r => r.data),
+  lineage: (connectionId: string, metricId: string) =>
+    api
+      .get<LineageRef[]>(`/connections/${connectionId}/metrics/${metricId}/lineage`)
+      .then(r => r.data),
 };
 
 export const dictionaryApi = {

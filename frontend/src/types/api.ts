@@ -63,6 +63,22 @@ export interface TableDetail {
   incoming_relationships: Relationship[];
 }
 
+// --- Certification / versioning (Phase 3) ---
+
+export type CertificationStatus = 'draft' | 'in_review' | 'certified' | 'deprecated';
+
+export interface SemanticVersion {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  version: number;
+  status: string;
+  snapshot: Record<string, unknown>;
+  change_reason: string | null;
+  changed_by_id: string | null;
+  created_at: string;
+}
+
 export interface GlossaryTerm {
   id: string;
   connection_id: string;
@@ -72,6 +88,10 @@ export interface GlossaryTerm {
   related_tables: string[] | null;
   related_columns: string[] | null;
   examples: string[] | null;
+  status: string;
+  version: number;
+  certified_by_id: string | null;
+  certified_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,6 +107,10 @@ export interface MetricDefinition {
   related_tables: string[] | null;
   dimensions: string[] | null;
   filters: Record<string, unknown> | null;
+  status: string;
+  version: number;
+  certified_by_id: string | null;
+  certified_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -248,6 +272,8 @@ export interface SavedQuery {
   params: ParamDef[] | null;
   version: number;
   status: string;
+  certified_by_id: string | null;
+  certified_at: string | null;
   is_public: boolean;
   created_at: string;
   updated_at: string;
@@ -330,4 +356,48 @@ export interface TileRunResult {
   taken_at: string;
   chart_type: ChartType | null;
   chart_config: ChartConfig | null;
+}
+
+// --- Catalog & lineage (Phase 3, Milestone 2) ---
+
+export type CatalogHitType =
+  | 'table'
+  | 'column'
+  | 'metric'
+  | 'glossary'
+  | 'sample_query'
+  | 'saved_query'
+  | 'knowledge';
+
+export interface CatalogHit {
+  type: CatalogHitType;
+  id: string;
+  name: string;
+  description: string | null;
+  status: string | null;
+  certified_at: string | null;
+  owner_id: string | null;
+  context: string | null;
+  score: number;
+  match_reason: string;
+}
+
+export interface CatalogFacets {
+  schemas: string[];
+  owners: string[];
+  tags: string[];
+  types: string[];
+  status_counts: Record<string, number>;
+}
+
+export interface LineageRef {
+  id: string;
+  artifact_type: string;
+  artifact_id: string;
+  ref_kind: string;
+  schema_name: string | null;
+  table_name: string;
+  column_name: string | null;
+  table_id: string | null;
+  column_id: string | null;
 }

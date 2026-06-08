@@ -36,8 +36,12 @@ class SavedQuery(Base):
     # List of param defs: {name, type: string|number|date|boolean, label, default}
     params: Mapped[list | None] = mapped_column(JSONB, default=list)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    # Forward-compat for Phase 3 certification (draft|certified|deprecated).
+    # Phase 3 trust/lifecycle: draft|in_review|certified|deprecated.
     status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    certified_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Visible to the whole workspace vs. owner-only.
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

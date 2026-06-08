@@ -21,6 +21,7 @@ import {
   IconUserCircle,
   IconBookmark,
   IconLayoutDashboard,
+  IconBook2,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { EmbeddingStatusBanner } from '../common/EmbeddingStatusBanner';
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { label: 'Metrics', path: '/metrics', icon: IconChartBar },
   { label: 'Dictionary', path: '/dictionary', icon: IconVocabulary },
   { label: 'Knowledge', path: '/knowledge', icon: IconFileText },
+  { label: 'Catalog', path: '/catalog', icon: IconBook2 },
   { label: 'History', path: '/history', icon: IconHistory },
 ];
 
