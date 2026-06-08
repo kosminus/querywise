@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars and fill in. Keep secrets out of version control.
+
+project_id  = "my-gcp-project"
+region      = "us-central1"
+name_prefix = "querywise-prod"
+
+# Network — create a VPC with private-services-access, or set create_network =
+# false and supply a network_id that already has PSA configured.
+create_network = true
+# network_id   = "projects/my-gcp-project/global/networks/my-vpc"
+
+# Cloud SQL
+db_tier = "db-custom-2-7680"
+db_ha   = true
+
+# Memorystore
+redis_memory_gb = 1
+redis_ha        = true
+
+# REQUIRED — Fernet key. Generate with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+encryption_key = "CHANGE_ME"
+
+# LLM provider key(s).
+openai_api_key = "CHANGE_ME"

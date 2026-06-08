@@ -1,0 +1,17 @@
+# Local provider plugins / cache
+**/.terraform/*
+
+# State (use a remote, encrypted backend — never commit state)
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Variable files with secrets
+*.tfvars
+!*.tfvars.example
+
+# Plan outputs
+*.tfplan
+
+# Keep the provider lockfile committed for reproducible versions:
+!**/.terraform.lock.hcl
