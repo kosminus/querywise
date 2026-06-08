@@ -1,0 +1,69 @@
+name: Deploy artifacts
+
+# Validates the deployment artifacts so a broken chart or module never merges.
+# Runs only when something under deploy/ (or these workflows) changes.
+
+on:
+  pull_request:
+    paths:
+      - "deploy/**"
+      - ".github/workflows/deploy-validate.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+
+jobs:
+  helm:
+    name: Helm lint + kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Helm lint
+        run: helm lint deploy/helm/querywise
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL -o /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp
+          sudo mv /tmp/kubeconform /usr/local/bin/
+
+      - name: Render + schema-validate
+        run: |
+          helm template querywise deploy/helm/querywise \
+            --set secrets.data.DATABASE_URL=postgresql+asyncpg://u:p@db:5432/querywise \
+            --set secrets.data.REDIS_URL=redis://redis:6379/0 \
+            --set secrets.data.ENCRYPTION_KEY=x --set secrets.data.JWT_SECRET=y \
+          | kubeconform -strict -summary -kubernetes-version 1.29.0
+
+  terraform:
+    name: Terraform fmt + validate (${{ matrix.cloud }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: [aws, gcp, azure]
+    defaults:
+      run:
+        working-directory: deploy/terraform/${{ matrix.cloud }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.5"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate

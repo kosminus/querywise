@@ -1,0 +1,72 @@
+name: Helm deploy
+description: Deploy QueryWise to a cluster with Helm, pinned to a specific image tag.
+
+inputs:
+  environment:
+    description: Target environment (staging | production). Selects the optional values-<env>.yaml overlay.
+    required: true
+  image_tag:
+    description: Image tag to deploy (both backend and frontend share it).
+    required: true
+  kube_config:
+    description: Base64-encoded kubeconfig for the target cluster.
+    required: true
+  namespace:
+    description: Kubernetes namespace.
+    required: false
+    default: querywise
+  release:
+    description: Helm release name.
+    required: false
+    default: querywise
+
+runs:
+  using: composite
+  steps:
+    - uses: azure/setup-helm@v4
+      with:
+        version: v3.16.0
+
+    - uses: azure/setup-kubectl@v4
+
+    - name: Write kubeconfig
+      shell: bash
+      run: |
+        echo "${{ inputs.kube_config }}" | base64 -d > "${RUNNER_TEMP}/kubeconfig"
+        chmod 600 "${RUNNER_TEMP}/kubeconfig"
+        echo "KUBECONFIG=${RUNNER_TEMP}/kubeconfig" >> "$GITHUB_ENV"
+
+    - name: Resolve per-environment values overlay
+      id: vals
+      shell: bash
+      run: |
+        f="deploy/helm/querywise/values-${{ inputs.environment }}.yaml"
+        if [ -f "$f" ]; then
+          echo "arg=--values $f" >> "$GITHUB_OUTPUT"
+          echo "Using overlay $f"
+        else
+          echo "arg=" >> "$GITHUB_OUTPUT"
+          echo "No overlay at $f — using chart defaults + --set."
+        fi
+
+    - name: Helm upgrade
+      shell: bash
+      env:
+        OWNER: ${{ github.repository_owner }}
+        TAG: ${{ inputs.image_tag }}
+      run: |
+        helm upgrade --install "${{ inputs.release }}" deploy/helm/querywise \
+          --namespace "${{ inputs.namespace }}" --create-namespace \
+          ${{ steps.vals.outputs.arg }} \
+          --set image.backend.repository="ghcr.io/${OWNER}/querywise-backend" \
+          --set image.backend.tag="${TAG}" \
+          --set image.frontend.repository="ghcr.io/${OWNER}/querywise-frontend" \
+          --set image.frontend.tag="${TAG}" \
+          --wait --atomic --timeout 10m
+
+    - name: Rollout summary
+      shell: bash
+      run: |
+        helm status "${{ inputs.release }}" --namespace "${{ inputs.namespace }}" || true
+        kubectl get pods -n "${{ inputs.namespace }}" \
+          -l app.kubernetes.io/instance="${{ inputs.release }}" || true
