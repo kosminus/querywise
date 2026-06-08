@@ -54,6 +54,7 @@ A full-stack application that translates natural language questions into SQL que
 - **Data catalog** — hybrid search (embeddings + keyword) across tables, columns, metrics, glossary, and knowledge, with facets and certified-first ranking
 - **Lineage** — sqlglot parses saved-query/metric SQL to show what each touches and what depends on a given table (impact view)
 - **Production hardening** — rate limiting, async job queue, OpenTelemetry tracing, structured logging, health probes
+- **Deploy anywhere** — hardened non-root images, a production Docker Compose stack, a Helm chart (HPA/PDB/ingress/migration hook), Terraform for AWS/GCP/Azure (managed Postgres+pgvector, Redis, secrets, in your own VPC), GitHub Actions CI/CD (build → staging → prod), and ops tooling (encrypted backup/restore + DR runbook) — see [`deploy/`](deploy/)
 
 
 ---
@@ -391,6 +392,28 @@ For development, `docker compose up app-db sample-db` starts both databases with
 
 ---
 
+## Production Deployment
+
+The `docker compose up` flow above is for **local development**. For production,
+QueryWise ships a full set of deployment artifacts under [`deploy/`](deploy/) —
+the same build-once images configured entirely by environment:
+
+| Target | Where | Best for |
+|--------|-------|----------|
+| **Docker Compose (prod)** | [`docker-compose.prod.yml`](docker-compose.prod.yml) | Small / on-prem, single host |
+| **Helm chart** | [`deploy/helm/querywise/`](deploy/helm/querywise) | EKS / GKE / AKS |
+| **Terraform** | [`deploy/terraform/{aws,gcp,azure}/`](deploy/terraform) | Managed Postgres+pgvector, Redis, secrets — in your own VPC |
+| **CI/CD** | [`.github/workflows/release.yml`](.github/workflows/release.yml) | Build → push images → Helm deploy (staging → prod) |
+| **Ops** | [`deploy/ops/`](deploy/ops) | Encrypted backup/restore, DR runbook, config reference |
+
+Highlights: hardened multi-stage **non-root** images, a one-shot Alembic
+migration that runs before new pods roll (replicas never race), backend
+autoscaling + PodDisruptionBudgets, secrets via the **external-secrets** seam,
+and a same-origin SPA behind an nginx edge. Start at [`deploy/README.md`](deploy/README.md);
+the production env template is [`.env.prod.example`](.env.prod.example).
+
+---
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -425,10 +448,18 @@ For development, `docker compose up app-db sample-db` starts both databases with
 
 ```
 querywise/
-├── docker-compose.yml              # 4 services: app-db, sample-db, backend, frontend
-├── .env.example                    # Environment variable template
+├── docker-compose.yml              # Dev: app-db, sample-db, backend, frontend
+├── docker-compose.prod.yml         # Prod: + redis, migrate, arq worker, nginx edge
+├── .env.example                    # Environment variable template (dev)
+├── .env.prod.example               # Environment variable template (prod)
 ├── CLAUDE.md                       # Claude Code project conventions
+├── CHANGELOG.md                    # Release notes
 ├── README.md                       # This file
+├── deploy/                         # Production deployment artifacts
+│   ├── helm/querywise/             # Helm chart (HPA, PDB, ingress, migration hook)
+│   ├── terraform/{aws,gcp,azure}/  # Managed Postgres+pgvector, Redis, secrets
+│   └── ops/                        # backup/restore, DR runbook, config reference
+├── .github/workflows/              # CI (tests/lint) + release (build → deploy)
 │
 ├── backend/
 │   ├── Dockerfile
