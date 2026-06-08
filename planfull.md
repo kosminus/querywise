@@ -378,7 +378,7 @@ managed-SaaS fleet but is **not** used to share one DB across customers today.
 |---|---|---|
 | **0** — Production hardening & async foundation | ✅ Implemented | PR #7 (→ v2.0.0) |
 | **1** — Identity, teams & ownership | ✅ Backend implemented (frontend pending) | migration `004`; OIDC is a registered seam (magic-link + local live) |
-| **2** — Durable analytics artifacts | 🟡 Milestone 1 implemented (saved queries, charts, result cache/snapshots, export); dashboards (Milestone 2) pending | migration `005`; result cache = Postgres `result_snapshots` (TTL `RESULT_CACHE_TTL_SECONDS`); charts via Recharts |
+| **2** — Durable analytics artifacts | ✅ Implemented | M1 (migration `005`): saved queries, charts, result cache/snapshots (Postgres `result_snapshots`, TTL `RESULT_CACHE_TTL_SECONDS`), export, Recharts. M2 (migration `006`): workspace-scoped dashboards + tiles (react-grid-layout), per-tile refresh, dashboard-level filters reusing the saved-query param system |
 | **3** — Discovery, catalog & trust | ⬜ Not started | — |
 | **4** — Scheduling, distribution & governance | ⬜ Not started | — |
 

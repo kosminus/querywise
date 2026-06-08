@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-QueryWise — a text-to-SQL application with a semantic metadata layer. Users ask natural language questions, an LLM generates SQL using business context, executes against their database, and returns human-readable answers. The conversational Assistant enables editing the semantic layer in plain language.
+QueryWise — a text-to-SQL application with a semantic metadata layer. Users ask natural language questions, an LLM generates SQL using business context, executes against their database, and returns human-readable answers. The conversational Assistant enables editing the semantic layer in plain language. Answers become durable, shareable artifacts: saved queries (pinned SQL + typed params), charts, and workspace dashboards.
 
 ## Tech Stack
 
@@ -94,7 +94,7 @@ frontend/src/
 ├── api/                 # Axios API clients (one per resource)
 ├── components/layout/   # AppShell with sidebar navigation
 ├── hooks/               # React Query hooks
-├── pages/               # Route pages (Query, Connections, Glossary, Metrics, Dictionary, Knowledge, History)
+├── pages/               # Route pages (Query, SavedQueries, Dashboards, Connections, Glossary, Metrics, Dictionary, Knowledge, History)
 └── types/               # TypeScript interfaces matching backend schemas
 ```
 
@@ -246,3 +246,15 @@ Real users, teams, roles, and ownership. Single-tenant per deployment; isolation
 - **AuthZ in services** (per the existing convention): `connection_service` scopes by org+workspace and enforces role; metadata endpoints authorize through the connection (the cascade root) via `app/api/v1/deps.py` (`require_connection_read/write`, `require_column_read/write`). Non-request entry points — startup auto-setup, the MCP server, the seed script via `DISABLE_AUTH` — act under `identity_service.system_context()` (admin in the default workspace).
 - **Endpoints:** `/auth/*` (login, register, magic-link request/verify, logout, me, providers), `/teams` + `/teams/{id}/members` (admin-managed), `/api-keys` (per-user, plaintext shown once).
 - **Heads-up:** once auth is enforced, the current (pre-auth) frontend gets 401s — run with `DISABLE_AUTH=true` until the Phase 1 frontend (login + auth context + workspace switcher) lands.
+
+## Durable analytics artifacts (Phase 2)
+
+One-shot answers become saved, owned, re-runnable, shareable objects. Two milestones; migrations `005` (artifacts) and `006` (dashboards).
+
+- **Models** (`app/db/models/`): `SavedQuery` (pinned SQL + typed `params` + `version`/`status`), `Chart` (viz config per saved query), `ResultSnapshot` (result persistence that doubles as the cache), `Dashboard` + `DashboardTile`.
+- **Scoping:** saved queries / charts / snapshots are **connection-scoped** (carry `organization_id` + `connection_id`, authorize through the connection via `require_connection_read/write`), matching the semantic-layer convention. `Dashboard` is the first **workspace-scoped** artifact (`workspace_id`); its endpoints use `get_org_context` + `ctx.require_role(...)` directly (like `teams.py`), and `dashboard_service._assert_access` mirrors `connection_service._assert_access`.
+- **Re-runs & cache** (`app/services/saved_query_service.py`): `render_sql` substitutes `{{param}}` placeholders with **type-safe, escaped SQL literals** (defense-in-depth atop the read-only blocklist), then `run_saved_query` is cache-first — a `ResultSnapshot` keyed by `sha256(final_sql + params + connection_id)` within `RESULT_CACHE_TTL_SECONDS` (default 300), with a `refresh` override. Execution reuses `query_service.execute_raw_sql`.
+- **Dashboards** (`app/services/dashboard_service.py`): tiles run via `run_saved_query` (so they inherit connection auth + the cache). Dashboard-level **filters reuse the param system** — filter values are passed as supplied params and a tile only consumes the `{{name}}`s its SQL references. `_finalize` refreshes server-side `onupdate` timestamps after UPDATEs to avoid async lazy-load errors during response serialization.
+- **Export:** client-side CSV/JSON in the frontend; backend CSV/JSON/XLSX for saved queries (XLSX needs the optional `export` extra → `openpyxl`).
+- **Endpoints:** `/connections/{id}/saved-queries` (+ `/run`, `/clone`, `/export`, `/charts`), `/dashboards` (+ `/tiles`, `/layout`, `/tiles/{id}/run`).
+- **Frontend:** Recharts (`components/charts/ChartView.tsx`) for viz; `react-grid-layout` for the dashboard grid; shared typed `components/common/ParamInputs.tsx` for params/filters. Charts are managed inside the saved-query view (no separate Charts page). Note: the frontend container's anonymous `node_modules` volume means new deps (recharts, react-grid-layout) need `docker compose exec frontend npm install` or an image rebuild.

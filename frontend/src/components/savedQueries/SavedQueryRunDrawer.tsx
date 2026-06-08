@@ -8,14 +8,12 @@ import {
   Loader,
   Menu,
   MultiSelect,
-  NumberInput,
   Paper,
   Select,
   Stack,
   Switch,
   Table,
   Text,
-  TextInput,
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -28,6 +26,7 @@ import {
 } from '../../hooks/useSavedQueries';
 import type { ChartType, SavedQuery, SavedQueryRunResult } from '../../types/api';
 import { ChartView } from '../charts/ChartView';
+import { ParamInputs } from '../common/ParamInputs';
 import { downloadCsv, downloadJson } from '../../utils/exportResult';
 
 const CHART_TYPES: ChartType[] = ['table', 'line', 'bar', 'area', 'pie', 'scatter'];
@@ -84,42 +83,11 @@ export function SavedQueryRunDrawer({
             <Text fw={500} mb="xs">
               Parameters
             </Text>
-            <Stack gap="xs">
-              {params.map((p) => {
-                const label = p.label || p.name;
-                if (p.type === 'number') {
-                  return (
-                    <NumberInput
-                      key={p.name}
-                      label={label}
-                      value={values[p.name] as number | undefined}
-                      onChange={(v) => setValues((s) => ({ ...s, [p.name]: v }))}
-                    />
-                  );
-                }
-                if (p.type === 'boolean') {
-                  return (
-                    <Switch
-                      key={p.name}
-                      label={label}
-                      checked={!!values[p.name]}
-                      onChange={(e) =>
-                        setValues((s) => ({ ...s, [p.name]: e.currentTarget.checked }))
-                      }
-                    />
-                  );
-                }
-                return (
-                  <TextInput
-                    key={p.name}
-                    label={label}
-                    placeholder={p.type === 'date' ? 'YYYY-MM-DD' : undefined}
-                    value={(values[p.name] as string) ?? ''}
-                    onChange={(e) => setValues((s) => ({ ...s, [p.name]: e.currentTarget.value }))}
-                  />
-                );
-              })}
-            </Stack>
+            <ParamInputs
+              params={params}
+              values={values}
+              onChange={(name, value) => setValues((s) => ({ ...s, [name]: value }))}
+            />
           </Paper>
         )}
 

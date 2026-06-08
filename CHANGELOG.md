@@ -48,6 +48,30 @@ product surface; all optional dependencies degrade gracefully).
 - **Assistant frontend component** — chat interface with draft confirmation cards for all semantic layer entities
 - **Assistant tests** — 33 unit tests for agent normalizers and service branching
 
+### Added (Phase 2 - Durable analytics artifacts)
+- **Saved queries** (migration `005`) — named, owned, re-runnable NL question + pinned SQL with
+  typed parameters (`{{date_from}}`, `{{region}}`); versioned, clone/fork. Connection-scoped,
+  mirroring the semantic-layer ownership model. Save directly from a query result.
+- **Result cache + snapshots** — runs are persisted to a Postgres `result_snapshots` table that
+  doubles as a cache keyed by `sha256(final_sql + params + connection_id)`; cache-first re-runs
+  within `RESULT_CACHE_TTL_SECONDS` (default 300) with a manual-refresh override, so dashboards
+  don't re-hit the warehouse on every load.
+- **Charts** — a persisted chart config per saved query (table/line/bar/area/pie/scatter),
+  rendered with Recharts.
+- **Export** — client-side CSV/JSON of any result, plus a backend CSV/JSON/XLSX export endpoint
+  for saved queries (`openpyxl` via the optional `export` extra).
+- **Type-safe parameter rendering** — `saved_query_service.render_sql` substitutes `{{param}}`
+  placeholders with validated, escaped SQL literals (defense-in-depth on top of the read-only
+  SQL safety blocklist).
+- **Dashboards** (migration `006`) — workspace-scoped, shareable dashboards composed of tiles in a
+  draggable/resizable grid (react-grid-layout); each tile renders a saved query as a chart or
+  table with optional per-tile auto-refresh.
+- **Dashboard-level filters** — a dashboard defines named filters whose values flow into every
+  tile's run; they reuse the saved-query parameter system, so a tile consumes only the filters its
+  SQL references.
+- New optional dependency extra: `export` (`openpyxl`). Frontend adds `recharts` and
+  `react-grid-layout`.
+
 ## [1.0.0] - 2026-06-04
 
 First stable release: natural-language-to-SQL with a semantic metadata layer.
