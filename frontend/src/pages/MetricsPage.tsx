@@ -20,11 +20,14 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
+import { IconPlus, IconTrash, IconEdit, IconHistory } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { metricsApi } from '../api/glossaryApi';
 import { useConnections } from '../hooks/useConnections';
 import type { MetricDefinition } from '../types/api';
+import { CertificationBadge } from '../components/common/CertificationBadge';
+import { StatusActions } from '../components/common/StatusActions';
+import { VersionHistory } from '../components/common/VersionHistory';
 
 export function MetricsPage() {
   const [connectionId, setConnectionId] = useState<string | null>(null);
@@ -32,6 +35,7 @@ export function MetricsPage() {
   const [editingMetric, setEditingMetric] = useState<MetricDefinition | null>(
     null
   );
+  const [historyFor, setHistoryFor] = useState<MetricDefinition | null>(null);
 
   const { data: connections } = useConnections();
   const qc = useQueryClient();
@@ -53,6 +57,20 @@ export function MetricsPage() {
       metricsApi.delete(connId, metricId),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ['metrics', connectionId] }),
+  });
+
+  const transitionMutation = useMutation({
+    mutationFn: ({ metricId, status, reason }: { metricId: string; status: string; reason?: string }) =>
+      metricsApi.transitionStatus(connectionId!, metricId, status, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['metrics', connectionId] });
+      notifications.show({ message: 'Status updated', color: 'green' });
+    },
+    onError: (e: unknown) =>
+      notifications.show({
+        message: e instanceof Error ? e.message : 'Transition failed',
+        color: 'red',
+      }),
   });
 
   return (
@@ -96,8 +114,8 @@ export function MetricsPage() {
               <Table.Th>Name</Table.Th>
               <Table.Th>Description</Table.Th>
               <Table.Th>SQL Expression</Table.Th>
-              <Table.Th>Aggregation</Table.Th>
-              <Table.Th w={80}>Actions</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th w={130}>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -118,11 +136,17 @@ export function MetricsPage() {
                   <Code>{m.sql_expression}</Code>
                 </Table.Td>
                 <Table.Td>
-                  {m.aggregation_type && (
-                    <Badge size="sm" variant="light">
-                      {m.aggregation_type}
-                    </Badge>
-                  )}
+                  <Group gap={6}>
+                    <CertificationBadge status={m.status} />
+                    <Text size="xs" c="dimmed">
+                      v{m.version}
+                    </Text>
+                    {m.aggregation_type && (
+                      <Badge size="xs" variant="outline">
+                        {m.aggregation_type}
+                      </Badge>
+                    )}
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   <Group gap={4}>
@@ -135,6 +159,17 @@ export function MetricsPage() {
                         <IconEdit size={14} />
                       </ActionIcon>
                     </Tooltip>
+                    <Tooltip label="Version history">
+                      <ActionIcon variant="subtle" size="sm" onClick={() => setHistoryFor(m)}>
+                        <IconHistory size={14} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <StatusActions
+                      status={m.status}
+                      onTransition={(status, reason) =>
+                        transitionMutation.mutate({ metricId: m.id, status, reason })
+                      }
+                    />
                     <Tooltip label="Delete">
                       <ActionIcon
                         variant="subtle"
@@ -168,6 +203,16 @@ export function MetricsPage() {
           }}
           connectionId={connectionId}
           metric={editingMetric}
+        />
+      )}
+
+      {connectionId && historyFor && (
+        <VersionHistory
+          opened={!!historyFor}
+          onClose={() => setHistoryFor(null)}
+          title={historyFor.display_name}
+          queryKey={['metricVersions', connectionId, historyFor.id]}
+          fetchVersions={() => metricsApi.versions(connectionId, historyFor.id)}
         />
       )}
     </Stack>

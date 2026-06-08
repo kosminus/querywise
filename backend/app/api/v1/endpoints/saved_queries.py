@@ -17,12 +17,16 @@ from app.api.v1.schemas.saved_query import (
     SavedQueryRunResponse,
     SavedQueryUpdate,
 )
+from app.api.v1.schemas.catalog import LineageRefResponse
+from app.api.v1.schemas.semantic_version import SemanticVersionResponse, StatusTransition
 from app.core.auth import AuthContext
 from app.core.exceptions import AppError, NotFoundError
+from app.db.models.artifact_dependency import ARTIFACT_SAVED_QUERY
 from app.db.models.chart import Chart
 from app.db.models.saved_query import SavedQuery
+from app.db.models.semantic_version import ENTITY_SAVED_QUERY
 from app.db.session import get_db
-from app.services import saved_query_service
+from app.services import lineage_service, saved_query_service, versioning_service
 
 router = APIRouter(tags=["saved-queries"])
 
@@ -77,6 +81,7 @@ async def create_saved_query(
     )
     db.add(saved)
     await db.flush()
+    await lineage_service.recompute_saved_query(db, ctx, saved)
     return saved
 
 
@@ -101,19 +106,25 @@ async def update_saved_query(
     connection_id: uuid.UUID,
     saved_query_id: uuid.UUID,
     body: SavedQueryUpdate,
-    _ctx: AuthContext = Depends(require_connection_write),
+    ctx: AuthContext = Depends(require_connection_write),
     db: AsyncSession = Depends(get_db),
 ):
     saved = await _get_saved_query(db, connection_id, saved_query_id)
     updates = body.model_dump(exclude_unset=True)
+    # Status changes go through the governed lifecycle, not a raw field write.
+    new_status = updates.pop("status", None)
     if "params" in updates and body.params is not None:
         updates["params"] = [p.model_dump() for p in body.params]
-    # Bump version when the executable SQL changes.
-    if "pinned_sql" in updates and updates["pinned_sql"] != saved.pinned_sql:
-        saved.version += 1
     for key, value in updates.items():
         setattr(saved, key, value)
+    # A content edit bumps the version and appends a changelog snapshot.
+    if updates:
+        await versioning_service.record_edit(db, ctx, ENTITY_SAVED_QUERY, saved)
+    if new_status is not None and new_status != saved.status:
+        await versioning_service.transition_status(db, ctx, ENTITY_SAVED_QUERY, saved, new_status)
     await db.flush()
+    if "pinned_sql" in updates:
+        await lineage_service.recompute_saved_query(db, ctx, saved)
     return saved
 
 
@@ -158,7 +169,77 @@ async def clone_saved_query(
     )
     db.add(clone)
     await db.flush()
+    await lineage_service.recompute_saved_query(db, ctx, clone)
     return clone
+
+
+# --------------------------------------------------------------------------- #
+# Certification lifecycle + version history
+# --------------------------------------------------------------------------- #
+@router.post(
+    "/connections/{connection_id}/saved-queries/{saved_query_id}/status",
+    response_model=SavedQueryResponse,
+)
+async def transition_saved_query_status(
+    connection_id: uuid.UUID,
+    saved_query_id: uuid.UUID,
+    body: StatusTransition,
+    ctx: AuthContext = Depends(require_connection_write),
+    db: AsyncSession = Depends(get_db),
+):
+    saved = await _get_saved_query(db, connection_id, saved_query_id)
+    await versioning_service.transition_status(
+        db, ctx, ENTITY_SAVED_QUERY, saved, body.status, reason=body.reason
+    )
+    await db.flush()
+    return saved
+
+
+@router.get(
+    "/connections/{connection_id}/saved-queries/{saved_query_id}/versions",
+    response_model=list[SemanticVersionResponse],
+)
+async def list_saved_query_versions(
+    connection_id: uuid.UUID,
+    saved_query_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_saved_query(db, connection_id, saved_query_id)
+    return await versioning_service.list_versions(db, ENTITY_SAVED_QUERY, saved_query_id)
+
+
+@router.get(
+    "/connections/{connection_id}/saved-queries/{saved_query_id}/versions/{version}",
+    response_model=SemanticVersionResponse,
+)
+async def get_saved_query_version(
+    connection_id: uuid.UUID,
+    saved_query_id: uuid.UUID,
+    version: int,
+    _ctx: AuthContext = Depends(require_connection_read),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_saved_query(db, connection_id, saved_query_id)
+    snap = await versioning_service.get_version(db, ENTITY_SAVED_QUERY, saved_query_id, version)
+    if snap is None:
+        raise NotFoundError("SavedQueryVersion", f"{saved_query_id}@{version}")
+    return snap
+
+
+@router.get(
+    "/connections/{connection_id}/saved-queries/{saved_query_id}/lineage",
+    response_model=list[LineageRefResponse],
+)
+async def get_saved_query_lineage(
+    connection_id: uuid.UUID,
+    saved_query_id: uuid.UUID,
+    _ctx: AuthContext = Depends(require_connection_read),
+    db: AsyncSession = Depends(get_db),
+):
+    """What tables/columns this saved query touches."""
+    await _get_saved_query(db, connection_id, saved_query_id)
+    return await lineage_service.refs_for_artifact(db, ARTIFACT_SAVED_QUERY, saved_query_id)
 
 
 # --------------------------------------------------------------------------- #

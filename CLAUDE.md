@@ -44,7 +44,7 @@ For manual seeding (if auto-setup disabled): `python backend/scripts/seed_ifrs9_
 Run from `backend/`:
 
 ```bash
-pip install -e ".[llm,dev,bigquery,databricks]"  # Install all deps
+pip install -e ".[llm,dev,bigquery,databricks,lineage]"  # Install all deps (add export,observability,jobs as needed)
 alembic upgrade head                  # Run migrations
 uvicorn app.main:app --reload         # Dev server on :8000
 pytest                                # Run tests
@@ -233,7 +233,7 @@ dependencies degrade gracefully — the app boots without `structlog` /
 - **Jobs** (`app/jobs/`): `JobQueue` ABC with `InProcessJobQueue` (asyncio, default) and `ArqJobQueue` (Redis). Jobs are registered by name in `registry.py`; `launch_background_embeddings` submits `"generate_embeddings"` through `get_job_queue()`. For arq, run a worker: `JOB_BACKEND=arq arq app.jobs.worker.WorkerSettings` (embedding progress then lives in the worker process).
 - **Health** (`app/api/v1/endpoints/health.py`): `GET /health/live` (process) and `GET /health/ready` (DB + job queue + LLM provider, 503 on failure) for K8s probes.
 - **LLM endpoints:** Azure OpenAI provider (`azure_openai`) added so the pipeline can run inside a customer VPC; registered in `provider_registry`.
-- **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). Optional deps: `pip install -e ".[observability,jobs]"`.
+- **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` installs `.[llm,dev,observability,lineage]` and runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). The lineage tests need `sqlglot` (the `[lineage]` extra) and `pytest.importorskip` past it otherwise. Optional deps: `pip install -e ".[observability,jobs]"`.
 
 ## Identity & auth (Phase 1)
 
@@ -258,3 +258,14 @@ One-shot answers become saved, owned, re-runnable, shareable objects. Two milest
 - **Export:** client-side CSV/JSON in the frontend; backend CSV/JSON/XLSX for saved queries (XLSX needs the optional `export` extra → `openpyxl`).
 - **Endpoints:** `/connections/{id}/saved-queries` (+ `/run`, `/clone`, `/export`, `/charts`), `/dashboards` (+ `/tiles`, `/layout`, `/tiles/{id}/run`).
 - **Frontend:** Recharts (`components/charts/ChartView.tsx`) for viz; `react-grid-layout` for the dashboard grid; shared typed `components/common/ParamInputs.tsx` for params/filters. Charts are managed inside the saved-query view (no separate Charts page). Note: the frontend container's anonymous `node_modules` volume means new deps (recharts, react-grid-layout) need `docker compose exec frontend npm install` or an image rebuild.
+
+## Discovery, catalog & trust (Phase 3)
+
+Makes the semantic layer discoverable and trustworthy. Two milestones; migrations `007` (certification + versioning) and `008` (catalog lineage). **Column profiling is deferred** to a later milestone.
+
+- **Certification lifecycle** (`app/services/versioning_service.py`): metrics, glossary terms, sample queries, and saved queries carry `status` (`draft|in_review|certified|deprecated`), an integer `version`, and `certified_by_id`/`certified_at`. Transitions go through one governed endpoint per entity (`POST /connections/{id}/{entity}/{eid}/status`); the state machine (`_ALLOWED_TRANSITIONS`) and role gate (`_ROLE_FOR_TARGET`) live in the service — **editor** submits-for-review/reverts, **admin** certifies/deprecates. Certifying runs a lightweight SQL check (`check_sql_safety` + a sqlglot parse). One service handles all four entity types via `_SNAPSHOT_FIELDS` / `_SQL_FIELD` maps.
+- **Versioning & changelog** (`SemanticVersion` model): every content edit (PUT → `record_edit`, bumps version) and status transition appends an append-only snapshot. Exposed at `GET .../{entity}/{eid}/versions` (+ `/{version}`); `versioning_service.diff` gives a field-level diff. UI: shared `frontend/src/components/common/{CertificationBadge,StatusActions,VersionHistory}.tsx`, wired into the Metrics/Glossary/SavedQueries pages.
+- **Catalog search** (`app/services/catalog_service.py`, `app/api/v1/endpoints/catalog.py`): `GET /connections/{id}/catalog/search` runs a hybrid search across tables, columns, metrics, glossary, sample/saved queries, and knowledge — **reusing the existing pgvector embeddings + the keyword scorer** (`semantic/relevance_scorer.py`), no tsvector. Hits merge into a uniform `CatalogHit`; certified items are boosted (`rank_hits`). `GET .../catalog/facets` returns schemas/owners/tags/type+status counts. Connection-scoped via `require_connection_read`. Frontend: `pages/CatalogPage.tsx` (search + facet sidebar + detail/lineage drawer).
+- **Lineage** (`app/services/lineage_service.py`, `ArtifactDependency` model): saved-query `pinned_sql` and metric `sql_expression` are parsed with **sqlglot** (optional `[lineage]` extra; lazy import, degrades to a no-op if absent) into table/column edges, recomputed on create/update (best-effort, never blocks the write). Per-artifact "what this touches" at `GET .../{saved-queries|metrics}/{id}/lineage`; impact view "what depends on this table" at `GET .../catalog/lineage?table=&column=`. Connector type → sqlglot dialect via `dialect_for`.
+- **Endpoints:** `/connections/{id}/catalog/{search,facets,lineage}`, plus `/status`, `/versions`, `/versions/{v}`, and `/lineage` sub-resources on the metric/glossary/sample-query/saved-query routers.
+- **Heads-up:** existing rows migrate to `status='draft'`, `version=1`. The saved-query PUT routes any `status` change through the governed lifecycle (no raw status writes). sqlglot is a new optional dep — install the `[lineage]` extra (or rebuild the backend image) for lineage to populate.

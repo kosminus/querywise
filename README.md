@@ -50,6 +50,9 @@ A full-stack application that translates natural language questions into SQL que
 - **Saved queries** — name and pin a question + SQL with typed parameters (`{{region}}`); re-run, version, clone, and export (CSV/JSON/XLSX)
 - **Charts & result caching** — visualize a saved query (line/bar/area/pie/scatter via Recharts); results are snapshotted to a Postgres cache so re-runs don't re-hit the warehouse
 - **Dashboards** — compose saved queries into a shareable, draggable tile grid with dashboard-level filters that flow into every tile's SQL
+- **Certification & versioning** — govern metrics, glossary, and saved queries through a `draft → in_review → certified → deprecated` lifecycle (editors submit, admins certify) with a per-entity version history and changelog
+- **Data catalog** — hybrid search (embeddings + keyword) across tables, columns, metrics, glossary, and knowledge, with facets and certified-first ranking
+- **Lineage** — sqlglot parses saved-query/metric SQL to show what each touches and what depends on a given table (impact view)
 - **Production hardening** — rate limiting, async job queue, OpenTelemetry tracing, structured logging, health probes
 
 
@@ -354,8 +357,8 @@ cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -e ".[llm,dev]"
+# Install dependencies (add `lineage` for sqlglot-based catalog lineage)
+pip install -e ".[llm,dev,lineage]"
 
 # Start PostgreSQL with pgvector (must be running on localhost:5432)
 # Run migrations

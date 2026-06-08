@@ -12,6 +12,7 @@ import { DashboardsPage } from './pages/DashboardsPage';
 import { DashboardDetailPage } from './pages/DashboardDetailPage';
 import { DictionaryPage } from './pages/DictionaryPage';
 import { KnowledgePage } from './pages/KnowledgePage';
+import { CatalogPage } from './pages/CatalogPage';
 import { HistoryPage } from './pages/HistoryPage';
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/metrics" element={<MetricsPage />} />
           <Route path="/dictionary" element={<DictionaryPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/history" element={<HistoryPage />} />
         </Route>
       </Route>

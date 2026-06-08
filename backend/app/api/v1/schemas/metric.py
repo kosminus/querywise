@@ -37,6 +37,10 @@ class MetricResponse(BaseModel):
     related_tables: list[str] | None
     dimensions: list[str] | None
     filters: dict | None
+    status: str
+    version: int
+    certified_by_id: UUID | None
+    certified_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

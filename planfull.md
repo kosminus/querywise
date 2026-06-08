@@ -379,7 +379,7 @@ managed-SaaS fleet but is **not** used to share one DB across customers today.
 | **0** — Production hardening & async foundation | ✅ Implemented | PR #7 (→ v2.0.0) |
 | **1** — Identity, teams & ownership | ✅ Backend implemented (frontend pending) | migration `004`; OIDC is a registered seam (magic-link + local live) |
 | **2** — Durable analytics artifacts | ✅ Implemented | M1 (migration `005`): saved queries, charts, result cache/snapshots (Postgres `result_snapshots`, TTL `RESULT_CACHE_TTL_SECONDS`), export, Recharts. M2 (migration `006`): workspace-scoped dashboards + tiles (react-grid-layout), per-tile refresh, dashboard-level filters reusing the saved-query param system |
-| **3** — Discovery, catalog & trust | ⬜ Not started | — |
+| **3** — Discovery, catalog & trust | ✅ M1+M2 implemented (column profiling deferred) | M1 (migration `007`): certification + semantic versioning/approval lifecycle on metrics/glossary/sample-queries/saved-queries + `semantic_versions` changelog (`versioning_service`). M2 (migration `008`): catalog hybrid search + facets (`catalog_service`, reuses pgvector+keyword) and sqlglot lineage (`artifact_dependencies`, `lineage_service`) with per-artifact + impact views; `CatalogPage` UI. **Deferred:** column profiling |
 | **4** — Scheduling, distribution & governance | ⬜ Not started | — |
 
 > Integration + Alembic test coverage for the Phase 0 CI baseline is tracked in issue #8.

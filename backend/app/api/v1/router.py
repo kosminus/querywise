@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     api_keys,
     assistant,
     auth,
+    catalog,
     connections,
     dashboards,
     dictionary,
@@ -37,3 +38,4 @@ api_router.include_router(saved_queries.router)
 api_router.include_router(dashboards.router)
 api_router.include_router(query_history.router)
 api_router.include_router(knowledge.router)
+api_router.include_router(catalog.router)

@@ -3,8 +3,10 @@ import type {
   Chart,
   ChartType,
   ChartConfig,
+  LineageRef,
   SavedQuery,
   SavedQueryRunResult,
+  SemanticVersion,
 } from '../types/api';
 
 const base = (connectionId: string) => `/connections/${connectionId}/saved-queries`;
@@ -33,6 +35,14 @@ export const savedQueriesApi = {
       .then((r) => r.data),
   exportUrl: (connectionId: string, id: string, format: 'csv' | 'json' | 'xlsx') =>
     `${api.defaults.baseURL}${base(connectionId)}/${id}/export?format=${format}`,
+  transitionStatus: (connectionId: string, id: string, status: string, reason?: string) =>
+    api
+      .post<SavedQuery>(`${base(connectionId)}/${id}/status`, { status, reason })
+      .then((r) => r.data),
+  versions: (connectionId: string, id: string) =>
+    api.get<SemanticVersion[]>(`${base(connectionId)}/${id}/versions`).then((r) => r.data),
+  lineage: (connectionId: string, id: string) =>
+    api.get<LineageRef[]>(`${base(connectionId)}/${id}/lineage`).then((r) => r.data),
 };
 
 export const chartsApi = {

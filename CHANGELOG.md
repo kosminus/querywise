@@ -72,6 +72,32 @@ product surface; all optional dependencies degrade gracefully).
 - New optional dependency extra: `export` (`openpyxl`). Frontend adds `recharts` and
   `react-grid-layout`.
 
+### Added (Phase 3 - Discovery, catalog & trust)
+- **Certification & semantic versioning** (migration `007`) — metrics, glossary terms, sample
+  queries, and saved queries gain a governed lifecycle (`draft → in_review → certified →
+  deprecated`), an integer `version`, and certification stamps (`certified_by`/`certified_at`).
+  Editors submit for review / revert; admins certify / deprecate. Certifying validates the
+  entity's SQL (read-only blocklist + a sqlglot parse).
+- **Version history & changelog** — every content edit and status transition appends a
+  `SemanticVersion` snapshot, exposed at `.../{entity}/{id}/versions` with a field-level diff
+  helper; surfaced in the UI as a per-entity history timeline.
+- **Lifecycle logic** centralized in `versioning_service.py` so all four entity types behave
+  identically; status transitions go through a single governed endpoint
+  (`POST .../{entity}/{id}/status`).
+- **Data catalog** (`catalog_service.py`, `GET /connections/{id}/catalog/search` + `/facets`) — a
+  unified hybrid search across tables, columns, metrics, glossary, sample/saved queries, and
+  knowledge, reusing the existing pgvector embeddings + keyword scorer (no new full-text infra).
+  Certified items are boosted in ranking; facets by type, status, schema, and owner. New
+  `frontend/src/pages/CatalogPage.tsx` with search, facet sidebar, and a detail/lineage drawer.
+- **Lightweight lineage** (migration `008`, `lineage_service.py`) — saved-query and metric SQL is
+  parsed with sqlglot into `artifact_dependencies` edges on create/update (best-effort; degrades
+  to a no-op if sqlglot is absent). Powers the per-artifact "what this touches" view
+  (`.../{entity}/{id}/lineage`) and the impact view "what depends on this table"
+  (`GET .../catalog/lineage?table=`).
+- New optional dependency extra: `lineage` (`sqlglot`); installed in the backend image and in CI
+  so the lineage tests run (they `importorskip` past `sqlglot` when the extra is absent).
+- **Deferred to a later milestone:** column profiling (null rate / distinct counts / sample values).
+
 ## [1.0.0] - 2026-06-04
 
 First stable release: natural-language-to-SQL with a semantic metadata layer.

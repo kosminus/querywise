@@ -45,6 +45,8 @@ class SavedQueryResponse(BaseModel):
     params: list[ParamDef] | None
     version: int
     status: str
+    certified_by_id: UUID | None
+    certified_at: datetime | None
     is_public: bool
     created_at: datetime
     updated_at: datetime

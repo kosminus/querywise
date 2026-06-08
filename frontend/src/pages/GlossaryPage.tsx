@@ -14,22 +14,25 @@ import {
   Tooltip,
   Alert,
   Loader,
-  Badge,
   Code,
   TagsInput,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
+import { IconPlus, IconTrash, IconEdit, IconHistory } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { glossaryApi } from '../api/glossaryApi';
 import { useConnections } from '../hooks/useConnections';
 import type { GlossaryTerm } from '../types/api';
+import { CertificationBadge } from '../components/common/CertificationBadge';
+import { StatusActions } from '../components/common/StatusActions';
+import { VersionHistory } from '../components/common/VersionHistory';
 
 export function GlossaryPage() {
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editingTerm, setEditingTerm] = useState<GlossaryTerm | null>(null);
+  const [historyFor, setHistoryFor] = useState<GlossaryTerm | null>(null);
 
   const { data: connections } = useConnections();
   const qc = useQueryClient();
@@ -51,6 +54,20 @@ export function GlossaryPage() {
       glossaryApi.delete(connId, termId),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ['glossary', connectionId] }),
+  });
+
+  const transitionMutation = useMutation({
+    mutationFn: ({ termId, status, reason }: { termId: string; status: string; reason?: string }) =>
+      glossaryApi.transitionStatus(connectionId!, termId, status, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['glossary', connectionId] });
+      notifications.show({ message: 'Status updated', color: 'green' });
+    },
+    onError: (e: unknown) =>
+      notifications.show({
+        message: e instanceof Error ? e.message : 'Transition failed',
+        color: 'red',
+      }),
   });
 
   return (
@@ -93,8 +110,8 @@ export function GlossaryPage() {
               <Table.Th>Term</Table.Th>
               <Table.Th>Definition</Table.Th>
               <Table.Th>SQL Expression</Table.Th>
-              <Table.Th>Tables</Table.Th>
-              <Table.Th w={80}>Actions</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th w={130}>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -112,12 +129,11 @@ export function GlossaryPage() {
                   <Code>{term.sql_expression}</Code>
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={4}>
-                    {term.related_tables?.map((t) => (
-                      <Badge key={t} size="xs" variant="light">
-                        {t}
-                      </Badge>
-                    ))}
+                  <Group gap={6}>
+                    <CertificationBadge status={term.status} />
+                    <Text size="xs" c="dimmed">
+                      v{term.version}
+                    </Text>
                   </Group>
                 </Table.Td>
                 <Table.Td>
@@ -131,6 +147,17 @@ export function GlossaryPage() {
                         <IconEdit size={14} />
                       </ActionIcon>
                     </Tooltip>
+                    <Tooltip label="Version history">
+                      <ActionIcon variant="subtle" size="sm" onClick={() => setHistoryFor(term)}>
+                        <IconHistory size={14} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <StatusActions
+                      status={term.status}
+                      onTransition={(status, reason) =>
+                        transitionMutation.mutate({ termId: term.id, status, reason })
+                      }
+                    />
                     <Tooltip label="Delete">
                       <ActionIcon
                         variant="subtle"
@@ -164,6 +191,16 @@ export function GlossaryPage() {
           }}
           connectionId={connectionId}
           term={editingTerm}
+        />
+      )}
+
+      {connectionId && historyFor && (
+        <VersionHistory
+          opened={!!historyFor}
+          onClose={() => setHistoryFor(null)}
+          title={historyFor.term}
+          queryKey={['glossaryVersions', connectionId, historyFor.id]}
+          fetchVersions={() => glossaryApi.versions(connectionId, historyFor.id)}
         />
       )}
     </Stack>

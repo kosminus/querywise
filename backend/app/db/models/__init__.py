@@ -1,4 +1,5 @@
 from app.db.models.api_key import ApiKey
+from app.db.models.artifact_dependency import ArtifactDependency
 from app.db.models.chart import Chart
 from app.db.models.connection import DatabaseConnection
 from app.db.models.dashboard import Dashboard
@@ -14,6 +15,7 @@ from app.db.models.result_snapshot import ResultSnapshot
 from app.db.models.sample_query import SampleQuery
 from app.db.models.saved_query import SavedQuery
 from app.db.models.schema_cache import CachedColumn, CachedRelationship, CachedTable
+from app.db.models.semantic_version import SemanticVersion
 from app.db.models.team import Team
 from app.db.models.user import User
 
@@ -39,4 +41,6 @@ __all__ = [
     "ResultSnapshot",
     "Dashboard",
     "DashboardTile",
+    "SemanticVersion",
+    "ArtifactDependency",
 ]

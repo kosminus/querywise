@@ -34,6 +34,9 @@ databricks = [
 export = [
     "openpyxl>=3.1",
 ]
+lineage = [
+    "sqlglot>=25.0",
+]
 observability = [
     "structlog>=24.0",
     "prometheus-client>=0.20",

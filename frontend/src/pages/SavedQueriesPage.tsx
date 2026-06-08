@@ -16,6 +16,7 @@ import {
 import {
   IconCopy,
   IconEdit,
+  IconHistory,
   IconPlayerPlay,
   IconPlus,
   IconTrash,
@@ -26,22 +27,22 @@ import {
   useCloneSavedQuery,
   useDeleteSavedQuery,
   useSavedQueries,
+  useTransitionSavedQueryStatus,
 } from '../hooks/useSavedQueries';
+import { savedQueriesApi } from '../api/savedQueriesApi';
 import type { SavedQuery } from '../types/api';
 import { SavedQueryFormModal } from '../components/savedQueries/SavedQueryFormModal';
 import { SavedQueryRunDrawer } from '../components/savedQueries/SavedQueryRunDrawer';
-
-const STATUS_COLOR: Record<string, string> = {
-  certified: 'green',
-  draft: 'gray',
-  deprecated: 'red',
-};
+import { CertificationBadge } from '../components/common/CertificationBadge';
+import { StatusActions } from '../components/common/StatusActions';
+import { VersionHistory } from '../components/common/VersionHistory';
 
 export function SavedQueriesPage() {
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SavedQuery | null>(null);
   const [running, setRunning] = useState<SavedQuery | null>(null);
+  const [historyFor, setHistoryFor] = useState<SavedQuery | null>(null);
 
   const { data: connections } = useConnections();
   const connOptions = connections?.map((c) => ({ value: c.id, label: c.name })) ?? [];
@@ -52,6 +53,21 @@ export function SavedQueriesPage() {
   const { data: savedQueries, isLoading } = useSavedQueries(connectionId ?? undefined);
   const deleteMutation = useDeleteSavedQuery(connectionId ?? '');
   const cloneMutation = useCloneSavedQuery(connectionId ?? '');
+  const transitionMutation = useTransitionSavedQueryStatus(connectionId ?? '');
+
+  function handleTransition(id: string, status: string, reason?: string) {
+    transitionMutation.mutate(
+      { id, status, reason },
+      {
+        onSuccess: () => notifications.show({ message: `Status → ${status}`, color: 'green' }),
+        onError: (e: unknown) =>
+          notifications.show({
+            message: e instanceof Error ? e.message : 'Transition failed',
+            color: 'red',
+          }),
+      },
+    );
+  }
 
   return (
     <Stack gap="md">
@@ -114,9 +130,7 @@ export function SavedQueriesPage() {
                 </Table.Td>
                 <Table.Td>
                   <Group gap={6}>
-                    <Badge size="sm" variant="light" color={STATUS_COLOR[sq.status] ?? 'gray'}>
-                      {sq.status}
-                    </Badge>
+                    <CertificationBadge status={sq.status} />
                     {sq.is_public && (
                       <Badge size="sm" variant="outline">
                         shared
@@ -161,6 +175,15 @@ export function SavedQueriesPage() {
                         <IconCopy size={16} />
                       </ActionIcon>
                     </Tooltip>
+                    <Tooltip label="Version history">
+                      <ActionIcon variant="subtle" onClick={() => setHistoryFor(sq)}>
+                        <IconHistory size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <StatusActions
+                      status={sq.status}
+                      onTransition={(status, reason) => handleTransition(sq.id, status, reason)}
+                    />
                     <Tooltip label="Delete">
                       <ActionIcon
                         variant="subtle"
@@ -198,6 +221,16 @@ export function SavedQueriesPage() {
           onClose={() => setRunning(null)}
           connectionId={connectionId}
           savedQuery={running}
+        />
+      )}
+
+      {connectionId && historyFor && (
+        <VersionHistory
+          opened={!!historyFor}
+          onClose={() => setHistoryFor(null)}
+          title={historyFor.name}
+          queryKey={['savedQueryVersions', connectionId, historyFor.id]}
+          fetchVersions={() => savedQueriesApi.versions(connectionId, historyFor.id)}
         />
       )}
     </Stack>
