@@ -20,6 +20,7 @@ import {
   IconLogout,
   IconUserCircle,
   IconBookmark,
+  IconLayoutDashboard,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { EmbeddingStatusBanner } from '../common/EmbeddingStatusBanner';
@@ -29,6 +30,7 @@ import type { Role } from '../../types/auth';
 const NAV_ITEMS = [
   { label: 'Query', path: '/query', icon: IconMessageQuestion },
   { label: 'Saved Queries', path: '/saved-queries', icon: IconBookmark },
+  { label: 'Dashboards', path: '/dashboards', icon: IconLayoutDashboard },
   { label: 'Connections', path: '/connections', icon: IconDatabase },
   { label: 'Glossary', path: '/glossary', icon: IconBook },
   { label: 'Metrics', path: '/metrics', icon: IconChartBar },

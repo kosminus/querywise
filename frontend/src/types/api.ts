@@ -281,3 +281,53 @@ export interface Chart {
   created_at: string;
   updated_at: string;
 }
+
+// --- Dashboards (Phase 2, Milestone 2) ---
+
+// A dashboard filter is shaped like a saved-query parameter.
+export type DashboardFilter = ParamDef;
+
+export interface TilePosition {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface DashboardTile {
+  id: string;
+  dashboard_id: string;
+  saved_query_id: string;
+  chart_id: string | null;
+  title: string | null;
+  position: TilePosition | null;
+  refresh_interval: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Dashboard {
+  id: string;
+  workspace_id: string;
+  owner_id: string | null;
+  name: string;
+  description: string | null;
+  filters: DashboardFilter[] | null;
+  is_public: boolean;
+  tiles: DashboardTile[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TileRunResult {
+  columns: string[];
+  column_types: string[];
+  rows: unknown[][];
+  row_count: number;
+  truncated: boolean;
+  execution_time_ms: number | null;
+  cached: boolean;
+  taken_at: string;
+  chart_type: ChartType | null;
+  chart_config: ChartConfig | null;
+}

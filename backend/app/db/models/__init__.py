@@ -1,6 +1,8 @@
 from app.db.models.api_key import ApiKey
 from app.db.models.chart import Chart
 from app.db.models.connection import DatabaseConnection
+from app.db.models.dashboard import Dashboard
+from app.db.models.dashboard_tile import DashboardTile
 from app.db.models.dictionary import DictionaryEntry
 from app.db.models.glossary import GlossaryTerm
 from app.db.models.knowledge import KnowledgeChunk, KnowledgeDocument
@@ -35,4 +37,6 @@ __all__ = [
     "SavedQuery",
     "Chart",
     "ResultSnapshot",
+    "Dashboard",
+    "DashboardTile",
 ]
