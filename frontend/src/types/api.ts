@@ -225,3 +225,59 @@ export interface AssistantChatMessage {
   content: string;
   action?: AssistantAction | null;
 }
+
+// --- Durable analytics artifacts (Phase 2) ---
+
+export type ParamType = 'string' | 'number' | 'date' | 'boolean';
+
+export interface ParamDef {
+  name: string;
+  type: ParamType;
+  label?: string | null;
+  default?: unknown;
+}
+
+export interface SavedQuery {
+  id: string;
+  connection_id: string;
+  owner_id: string | null;
+  name: string;
+  description: string | null;
+  nl_question: string | null;
+  pinned_sql: string;
+  params: ParamDef[] | null;
+  version: number;
+  status: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedQueryRunResult {
+  columns: string[];
+  column_types: string[];
+  rows: unknown[][];
+  row_count: number;
+  truncated: boolean;
+  execution_time_ms: number | null;
+  cached: boolean;
+  taken_at: string;
+}
+
+export type ChartType = 'table' | 'line' | 'bar' | 'pie' | 'area' | 'scatter';
+
+export interface ChartConfig {
+  x_axis?: string;
+  y_axis?: string[];
+  [key: string]: unknown;
+}
+
+export interface Chart {
+  id: string;
+  saved_query_id: string;
+  name: string;
+  chart_type: ChartType;
+  config: ChartConfig | null;
+  created_at: string;
+  updated_at: string;
+}

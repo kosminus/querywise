@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     default_query_timeout_seconds: int = 30
     default_max_rows: int = 1000
     max_retry_attempts: int = 3
+    # Result-cache freshness window for saved-query runs / dashboards.
+    result_cache_ttl_seconds: int = 300
 
     # LLM defaults
     default_llm_provider: str = "anthropic"
