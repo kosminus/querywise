@@ -1,7 +1,13 @@
 """Unit tests for lineage_service.extract_refs (pure sqlglot parsing, no DB)."""
 
+import pytest
+
 from app.db.models.artifact_dependency import REF_COLUMN, REF_TABLE
 from app.services import lineage_service as svc
+
+# extract_refs degrades to a no-op without sqlglot (the optional [lineage] extra);
+# these tests assert the *populated* path, so skip the module when it's absent.
+pytest.importorskip("sqlglot")
 
 
 def _tables(refs):
