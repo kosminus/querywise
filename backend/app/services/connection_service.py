@@ -13,6 +13,7 @@ from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.secrets import get_secrets_provider
 from app.db.models.connection import DatabaseConnection
 from app.db.models.membership import ROLE_ADMIN, ROLE_EDITOR
+from app.services import audit_service
 
 # Encryption of connection strings is delegated to the configured secrets
 # backend (env/Fernet by default — see app.core.secrets).
@@ -104,6 +105,14 @@ async def create_connection(
     )
     db.add(conn)
     await db.flush()
+    await audit_service.record(
+        db,
+        organization_id=ctx.organization_id,
+        workspace_id=ctx.workspace_id,
+        actor_id=ctx.user_id,
+        event_type=audit_service.CONNECTION_CREATED,
+        payload={"connection_id": str(conn.id), "name": name, "connector_type": connector_type},
+    )
     return conn
 
 
@@ -115,8 +124,10 @@ async def update_connection(
 ) -> DatabaseConnection:
     conn = await get_connection(db, connection_id, ctx, write=True)
 
+    rotated = False
     if "connection_string" in updates and updates["connection_string"] is not None:
         conn.connection_string_encrypted = _encrypt(str(updates.pop("connection_string")))
+        rotated = True
 
     for key, value in updates.items():
         if value is not None and hasattr(conn, key):
@@ -125,6 +136,23 @@ async def update_connection(
     await db.flush()
     # Invalidate cached connector since config may have changed
     await remove_connector(str(connection_id))
+    await audit_service.record(
+        db,
+        organization_id=ctx.organization_id,
+        workspace_id=ctx.workspace_id,
+        actor_id=ctx.user_id,
+        event_type=audit_service.CONNECTION_UPDATED,
+        payload={"connection_id": str(conn.id), "name": conn.name},
+    )
+    if rotated:
+        await audit_service.record(
+            db,
+            organization_id=ctx.organization_id,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            event_type=audit_service.CREDENTIAL_ROTATED,
+            payload={"connection_id": str(conn.id), "name": conn.name},
+        )
     return conn
 
 
@@ -132,9 +160,18 @@ async def delete_connection(
     db: AsyncSession, connection_id: uuid.UUID, ctx: AuthContext
 ) -> None:
     conn = await get_connection(db, connection_id, ctx, write=True)
+    name = conn.name
     await remove_connector(str(connection_id))
     await db.delete(conn)
     await db.flush()
+    await audit_service.record(
+        db,
+        organization_id=ctx.organization_id,
+        workspace_id=ctx.workspace_id,
+        actor_id=ctx.user_id,
+        event_type=audit_service.CONNECTION_DELETED,
+        payload={"connection_id": str(connection_id), "name": name},
+    )
 
 
 async def test_connection(

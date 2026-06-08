@@ -35,6 +35,33 @@ class Settings(BaseSettings):
     job_backend: str = "inprocess"  # inprocess (asyncio) | arq (Redis)
     redis_url: str = "redis://localhost:6379/0"
 
+    # Scheduling & notifications (Phase 4 — Milestone 2)
+    # The in-process scheduler loop claims due schedules and dispatches report
+    # jobs. Disable when a separate process owns scheduling, or in tests.
+    scheduler_enabled: bool = True
+    scheduler_tick_seconds: int = 60  # how often the loop scans for due schedules
+    # Public base URL of the frontend, used to build links in delivered reports
+    # and magic-link emails. Falls back to the first CORS origin when unset.
+    app_base_url: str | None = None
+    # Email (SMTP) delivery. When smtp_host is unset, email degrades to logging.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True  # STARTTLS
+    smtp_from: str = "querywise@localhost"
+    # Slack delivery via an Incoming Webhook URL. Unset → Slack degrades to log.
+    slack_webhook_url: str | None = None
+
+    # Cost attribution pricing (Phase 4 — Milestone 4). Estimates only; tune to
+    # your contract. BigQuery on-demand is ~$6.25 / TiB scanned.
+    cost_per_tib_scanned_usd: float = 6.25
+    cost_per_slot_ms_usd: float = 0.0
+    cost_per_dbu_usd: float = 0.0
+    # Fallback when no warehouse stats are reported (e.g. PostgreSQL): a rough
+    # per-second compute estimate. 0 = no time-based cost.
+    cost_per_second_usd: float = 0.0
+
     # Query defaults
     default_query_timeout_seconds: int = 30
     default_max_rows: int = 1000

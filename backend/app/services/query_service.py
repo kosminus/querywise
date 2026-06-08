@@ -15,8 +15,49 @@ from app.llm.agents.result_interpreter import ResultInterpreterAgent
 from app.llm.agents.sql_validator import SQLValidatorAgent, ValidationStatus
 from app.llm.router import route
 from app.semantic.context_builder import build_context
+from app.services import audit_service, cost_service, policy_service
 from app.services.connection_service import get_connection, get_decrypted_connection_string
+from app.services.lineage_service import dialect_for
+from app.services.policy_service import PolicyViolationError
 from app.utils.sql_sanitizer import check_sql_safety
+
+
+async def _enforce_policy_sql(
+    db: AsyncSession,
+    ctx: AuthContext,
+    connection_id: uuid.UUID,
+    eff: "policy_service.EffectivePolicy | None",
+    sql: str,
+    dialect: str | None,
+    *,
+    question: str | None = None,
+) -> str:
+    """Apply a connection's data policy to ``sql`` before execution.
+
+    Returns the (possibly row-filtered) SQL, or — on a policy block — records a
+    ``query.blocked`` audit event and raises a 403 with the reason. Returns
+    ``sql`` unchanged when no policy applies.
+    """
+    if eff is None:
+        return sql
+    try:
+        return policy_service.enforce_sql(eff, sql, dialect)
+    except PolicyViolationError as pv:
+        await audit_service.record(
+            db,
+            organization_id=ctx.organization_id,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            event_type=audit_service.QUERY_BLOCKED,
+            payload={
+                "connection_id": str(connection_id),
+                "question": question,
+                "sql": sql,
+                "reason": pv.reason,
+                "policy": True,
+            },
+        )
+        raise AppError(f"Blocked by data policy: {pv.reason}", status_code=403) from pv
 
 
 async def execute_nl_query(
@@ -99,22 +140,45 @@ async def execute_nl_query(
             validation = await validator.validate(final_sql, schema_tables)
 
     if validation.status == ValidationStatus.UNSAFE:
+        await audit_service.record(
+            db,
+            organization_id=ctx.organization_id,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            event_type=audit_service.QUERY_BLOCKED,
+            payload={
+                "connection_id": str(connection_id),
+                "question": question,
+                "sql": final_sql,
+                "reason": "; ".join(validation.issues),
+            },
+        )
         raise AppError(
             f"SQL safety violation: {'; '.join(validation.issues)}",
             status_code=403,
         )
 
-    # Step 5: Execute query
+    # Step 5: Execute query (enforcing the connection's data policy first)
     connector = await get_or_create_connector(
         str(connection_id), conn.connector_type, connection_string
     )
+    eff_policy = await policy_service.resolve_effective(db, connection_id, ctx.role)
+    dialect = dialect_for(conn.connector_type)
+    pol_max_rows, pol_timeout = policy_service.effective_limits(
+        eff_policy, conn.max_rows, conn.max_query_timeout_seconds
+    )
 
+    # A policy block here is a hard stop (raises 403) — it must happen outside
+    # the error-handler retry loop so it is never treated as a fixable error.
+    run_sql = await _enforce_policy_sql(
+        db, ctx, connection_id, eff_policy, final_sql, dialect, question=question
+    )
     try:
         with start_span("execute_query", **{"db.dialect": conn.connector_type}):
             result = await connector.execute_query(
-                final_sql,
-                timeout_seconds=conn.max_query_timeout_seconds,
-                max_rows=conn.max_rows,
+                run_sql,
+                timeout_seconds=pol_timeout,
+                max_rows=pol_max_rows,
             )
     except Exception as e:
         # Try error handler on execution errors
@@ -143,11 +207,16 @@ async def execute_nl_query(
             if validation.status != ValidationStatus.VALID:
                 continue
 
+            # Re-apply the policy to each corrected SQL so row filters / blocks
+            # can't be bypassed by an LLM rewrite. A block (403) propagates out.
+            run_sql = await _enforce_policy_sql(
+                db, ctx, connection_id, eff_policy, final_sql, dialect, question=question
+            )
             try:
                 result = await connector.execute_query(
-                    final_sql,
-                    timeout_seconds=conn.max_query_timeout_seconds,
-                    max_rows=conn.max_rows,
+                    run_sql,
+                    timeout_seconds=pol_timeout,
+                    max_rows=pol_max_rows,
                 )
                 break
             except Exception as retry_error:
@@ -171,6 +240,10 @@ async def execute_nl_query(
             db.add(execution)
             await db.flush()
             raise AppError(f"Query execution failed after {retry_count} retries: {e}")
+
+    # Apply policy column masking in place so redacted PII never reaches the
+    # interpreter LLM, the response, or persisted history.
+    result.rows, _ = policy_service.mask_result(eff_policy, result.columns, result.rows)
 
     # Step 6: Interpret results
     summary = None
@@ -209,6 +282,30 @@ async def execute_nl_query(
     )
     db.add(execution)
     await db.flush()
+
+    await audit_service.record(
+        db,
+        organization_id=ctx.organization_id,
+        workspace_id=ctx.workspace_id,
+        actor_id=ctx.user_id,
+        event_type=audit_service.QUERY_EXECUTED,
+        payload={
+            "connection_id": str(connection_id),
+            "query_execution_id": str(execution.id),
+            "question": question,
+            "sql": final_sql,
+            "row_count": result.row_count,
+        },
+    )
+
+    await cost_service.record_execution_cost(
+        db,
+        execution=execution,
+        ctx=ctx,
+        connector_type=conn.connector_type,
+        stats=result.stats,
+        final_sql=final_sql,
+    )
 
     return {
         "id": execution.id,
@@ -272,21 +369,41 @@ async def execute_raw_sql(
     # Step 1: Safety check
     safety_issues = check_sql_safety(sql)
     if safety_issues:
+        await audit_service.record(
+            db,
+            organization_id=ctx.organization_id,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            event_type=audit_service.QUERY_BLOCKED,
+            payload={
+                "connection_id": str(connection_id),
+                "sql": sql,
+                "reason": "; ".join(safety_issues),
+            },
+        )
         raise SQLSafetyError("; ".join(safety_issues))
 
     conn = await get_connection(db, connection_id, ctx)
     connection_string = get_decrypted_connection_string(conn)
 
-    # Step 2: Execute query
+    # Step 2: Enforce the data policy, then execute.
     connector = await get_or_create_connector(
         str(connection_id), conn.connector_type, connection_string
+    )
+    eff_policy = await policy_service.resolve_effective(db, connection_id, ctx.role)
+    dialect = dialect_for(conn.connector_type)
+    pol_max_rows, pol_timeout = policy_service.effective_limits(
+        eff_policy, conn.max_rows, conn.max_query_timeout_seconds
+    )
+    run_sql = await _enforce_policy_sql(
+        db, ctx, connection_id, eff_policy, sql, dialect, question=original_question
     )
 
     try:
         result = await connector.execute_query(
-            sql,
-            timeout_seconds=conn.max_query_timeout_seconds,
-            max_rows=conn.max_rows,
+            run_sql,
+            timeout_seconds=pol_timeout,
+            max_rows=pol_max_rows,
         )
     except Exception as e:
         # Save failed execution to history
@@ -304,6 +421,9 @@ async def execute_raw_sql(
         db.add(execution)
         await db.flush()
         raise AppError(f"Query execution failed: {e}") from e
+
+    # Apply policy column masking in place before interpretation / persistence.
+    result.rows, _ = policy_service.mask_result(eff_policy, result.columns, result.rows)
 
     # Step 3: Interpret results (LLM summary + follow-ups)
     summary = None
@@ -351,6 +471,15 @@ async def execute_raw_sql(
     )
     db.add(execution)
     await db.flush()
+
+    await cost_service.record_execution_cost(
+        db,
+        execution=execution,
+        ctx=ctx,
+        connector_type=conn.connector_type,
+        stats=result.stats,
+        final_sql=sql,
+    )
 
     return {
         "id": execution.id,

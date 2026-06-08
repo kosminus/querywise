@@ -22,6 +22,10 @@ import {
   IconBookmark,
   IconLayoutDashboard,
   IconBook2,
+  IconShieldLock,
+  IconClockHour4,
+  IconLockCog,
+  IconChartHistogram,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { EmbeddingStatusBanner } from '../common/EmbeddingStatusBanner';
@@ -38,7 +42,11 @@ const NAV_ITEMS = [
   { label: 'Dictionary', path: '/dictionary', icon: IconVocabulary },
   { label: 'Knowledge', path: '/knowledge', icon: IconFileText },
   { label: 'Catalog', path: '/catalog', icon: IconBook2 },
+  { label: 'Schedules', path: '/schedules', icon: IconClockHour4 },
   { label: 'History', path: '/history', icon: IconHistory },
+  { label: 'Usage & Cost', path: '/analytics', icon: IconChartHistogram, adminOnly: true },
+  { label: 'Policies', path: '/policies', icon: IconLockCog, adminOnly: true },
+  { label: 'Audit Log', path: '/audit', icon: IconShieldLock, adminOnly: true },
 ];
 
 const ROLE_COLOR: Record<Role, string> = {
@@ -113,7 +121,7 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !item.adminOnly || role === 'admin').map((item) => (
           <NavLink
             key={item.path}
             label={item.label}

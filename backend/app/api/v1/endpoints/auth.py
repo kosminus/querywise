@@ -19,6 +19,7 @@ from app.core.auth import clear_session_cookie, get_current_user, set_session_co
 from app.core.auth_providers import get_auth_provider
 from app.db.models.user import User
 from app.db.session import get_db
+from app.notifications import deliver
 from app.services import auth_service, identity_service
 
 logger = logging.getLogger("querywise.auth")
@@ -53,11 +54,23 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
 @router.post("/magic-link", response_model=MagicLinkResponse)
 async def request_magic_link(body: MagicLinkRequest, db: AsyncSession = Depends(get_db)):
     token = await auth_service.request_magic_link(db, body.email)
-    # Delivery (email/Slack) is wired in Phase 4; for now log it and, outside
-    # production, surface it so local dev can complete the flow.
-    frontend = settings.cors_origins[0] if settings.cors_origins else None
-    verify_url = f"{frontend}/login/verify?token={token}" if frontend else None
-    logger.info("Magic link issued for %s: %s", body.email, verify_url or token)
+    base = settings.app_base_url or (settings.cors_origins[0] if settings.cors_origins else None)
+    verify_url = f"{base}/login/verify?token={token}" if base else None
+
+    # Deliver via the configured channel (Phase 4). With no SMTP host set this
+    # degrades to logging — so local dev still completes the flow.
+    await deliver(
+        "email",
+        subject="Your QueryWise sign-in link",
+        text_body=(
+            f"Click to sign in: {verify_url}\n\n"
+            f"This link expires in {settings.magic_link_ttl_minutes} minutes."
+            if verify_url
+            else f"Your sign-in token: {token}"
+        ),
+        recipients=[body.email],
+    )
+    # Outside production, also surface the token so a dev client can complete login.
     expose = settings.environment != "production"
     return MagicLinkResponse(
         sent=True,

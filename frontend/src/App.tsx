@@ -14,6 +14,10 @@ import { DictionaryPage } from './pages/DictionaryPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { CatalogPage } from './pages/CatalogPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { AuditPage } from './pages/AuditPage';
+import { SchedulesPage } from './pages/SchedulesPage';
+import { PoliciesPage } from './pages/PoliciesPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 
 export default function App() {
   return (
@@ -37,6 +41,10 @@ export default function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/schedules" element={<SchedulesPage />} />
+          <Route path="/policies" element={<PoliciesPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/audit" element={<AuditPage />} />
         </Route>
       </Route>
     </Routes>

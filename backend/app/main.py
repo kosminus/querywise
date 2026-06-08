@@ -30,8 +30,14 @@ async def lifespan(app: FastAPI):
         from app.services.setup_service import auto_setup_sample_db
 
         await auto_setup_sample_db()
+
+    # Start the recurring-report scheduler loop (registers "run_schedule").
+    from app.jobs.scheduler import start_scheduler, stop_scheduler
+
+    start_scheduler()
     yield
     # Shutdown
+    await stop_scheduler()
     await engine.dispose()
 
 

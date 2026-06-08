@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    analytics,
     api_keys,
     assistant,
+    audit,
     auth,
     catalog,
     connections,
@@ -12,10 +14,12 @@ from app.api.v1.endpoints import (
     health,
     knowledge,
     metrics,
+    policies,
     query,
     query_history,
     sample_queries,
     saved_queries,
+    schedules,
     schemas,
     teams,
 )
@@ -39,3 +43,7 @@ api_router.include_router(dashboards.router)
 api_router.include_router(query_history.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(catalog.router)
+api_router.include_router(audit.router)
+api_router.include_router(schedules.router)
+api_router.include_router(policies.router)
+api_router.include_router(analytics.router)
