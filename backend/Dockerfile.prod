@@ -1,0 +1,71 @@
+# syntax=docker/dockerfile:1
+#
+# Hardened, multi-stage production image for the QueryWise backend.
+#   * builder stage compiles deps into an isolated venv (needs gcc/libpq-dev)
+#   * runtime stage carries only the venv + app + libpq runtime, runs non-root
+#
+# Build:  docker build -f Dockerfile.prod -t querywise-backend:prod .
+# Used by docker-compose.prod.yml for the backend, worker, and migrate services.
+
+# ---- builder ---------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Isolated venv we can copy wholesale into the runtime image.
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+# Copy only what the package + build needs (keeps the layer cache warm).
+COPY pyproject.toml ./
+COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./
+COPY scripts ./scripts
+
+# Production extras only — no [dev]. Non-editable install so the venv is
+# self-contained and the source tree isn't needed at runtime.
+RUN pip install ".[llm,bigquery,databricks,export,lineage,observability,jobs,scheduling]"
+
+# ---- runtime ---------------------------------------------------------------
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+# libpq for asyncpg/psycopg at runtime; curl for the container healthcheck.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq5 curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    # Non-root runtime user.
+    groupadd --system --gid 1001 querywise && \
+    useradd --system --uid 1001 --gid querywise --no-create-home querywise
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR /app
+# alembic.ini + migrations are needed by the `migrate` service; app code is the
+# package itself (installed into the venv) but we keep the tree for alembic env.
+COPY --chown=querywise:querywise alembic ./alembic
+COPY --chown=querywise:querywise alembic.ini ./
+COPY --chown=querywise:querywise app ./app
+COPY --chown=querywise:querywise scripts ./scripts
+
+USER querywise
+
+EXPOSE 8000
+
+# Liveness probe hits the app's own /health/live (process-only, no DB/LLM).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:8000/api/v1/health/live || exit 1
+
+# Workers come from env so the same image scales without a rebuild.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-4}"]

@@ -1,0 +1,121 @@
+# Production stack for QueryWise (small / on-prem single-tenant).
+#
+#   cp .env.prod.example .env.prod   # then edit secrets
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Topology:  frontend(nginx edge) ──> backend(uvicorn, N workers)
+#                                       ├─> app-db (pgvector)
+#                                       └─> redis  (cache + arq jobs)
+#            worker(arq) ─> redis/app-db        migrate(one-shot) ─> app-db
+#
+# TLS: terminate at the `frontend` edge by mounting certs + adding a 443 server
+# block, or front the stack with a cloud LB / external nginx. See the Helm chart
+# / Terraform modules (deploy/) for managed-ingress deployments.
+
+services:
+  app-db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-querywise}
+      POSTGRES_USER: ${POSTGRES_USER:-querywise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+    volumes:
+      - app_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-querywise} -d ${POSTGRES_DB:-querywise}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port by default — only the backend/worker/migrate reach it.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot schema migration. Backend/worker wait for this to finish cleanly
+  # so multiple backend replicas never race on `alembic upgrade`.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: querywise-backend:prod
+    restart: "no"
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-querywise}:${POSTGRES_PASSWORD}@app-db:5432/${POSTGRES_DB:-querywise}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      app-db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: querywise-backend:prod
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-querywise}:${POSTGRES_PASSWORD}@app-db:5432/${POSTGRES_DB:-querywise}
+      REDIS_URL: redis://redis:6379/0
+      JOB_BACKEND: arq
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
+      # Auto-setup seeds the sample DB — off in prod (point at a real warehouse).
+      AUTO_SETUP_SAMPLE_DB: ${AUTO_SETUP_SAMPLE_DB:-false}
+    depends_on:
+      app-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # arq worker: runs background jobs (embeddings, schedules) off the request path.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: querywise-backend:prod
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-querywise}:${POSTGRES_PASSWORD}@app-db:5432/${POSTGRES_DB:-querywise}
+      REDIS_URL: redis://redis:6379/0
+      JOB_BACKEND: arq
+    command: ["arq", "app.jobs.worker.WorkerSettings"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Edge: serves the SPA bundle and reverse-proxies /api, /mcp, /health.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # Empty => SPA calls the API same-origin; nginx proxies to backend.
+        VITE_API_URL: ""
+    image: querywise-frontend:prod
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+    depends_on:
+      - backend
+
+volumes:
+  app_db_data:
+  redis_data:

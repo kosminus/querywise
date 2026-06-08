@@ -48,6 +48,8 @@ Thumbs.db
 
 # Environment / secrets
 .env
+.env.prod
+.env.*.local
 *.pem
 *.key
 
