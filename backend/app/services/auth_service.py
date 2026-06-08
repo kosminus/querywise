@@ -23,8 +23,9 @@ from app.core.security import (
     verify_password,
 )
 from app.db.models.membership import ROLE_VIEWER, Membership
+from app.db.models.team import Team
 from app.db.models.user import User
-from app.services import identity_service
+from app.services import audit_service, identity_service
 
 
 def _normalize_email(email: str) -> str:
@@ -121,6 +122,24 @@ async def verify_magic_link(db: AsyncSession, token: str) -> User:
 async def _touch_login(db: AsyncSession, user: User) -> None:
     user.last_login_at = datetime.now(UTC)
     await db.flush()
+    # Resolve the user's home org (earliest membership) for the audit record.
+    result = await db.execute(
+        select(Team.organization_id, Membership.team_id)
+        .join(Team, Team.id == Membership.team_id)
+        .where(Membership.user_id == user.id)
+        .order_by(Membership.created_at)
+        .limit(1)
+    )
+    row = result.first()
+    if row is not None:
+        await audit_service.record(
+            db,
+            organization_id=row[0],
+            workspace_id=row[1],
+            actor_id=user.id,
+            event_type=audit_service.AUTH_LOGIN,
+            payload={"email": user.email},
+        )
 
 
 def issue_session_token(user: User) -> str:

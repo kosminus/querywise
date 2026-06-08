@@ -1,8 +1,11 @@
 from app.db.models.api_key import ApiKey
 from app.db.models.artifact_dependency import ArtifactDependency
+from app.db.models.audit_event import AuditEvent
 from app.db.models.chart import Chart
 from app.db.models.connection import DatabaseConnection
+from app.db.models.cost_attribution import CostAttribution
 from app.db.models.dashboard import Dashboard
+from app.db.models.data_policy import DataPolicy
 from app.db.models.dashboard_tile import DashboardTile
 from app.db.models.dictionary import DictionaryEntry
 from app.db.models.glossary import GlossaryTerm
@@ -14,6 +17,7 @@ from app.db.models.query_history import QueryExecution
 from app.db.models.result_snapshot import ResultSnapshot
 from app.db.models.sample_query import SampleQuery
 from app.db.models.saved_query import SavedQuery
+from app.db.models.schedule import Schedule
 from app.db.models.schema_cache import CachedColumn, CachedRelationship, CachedTable
 from app.db.models.semantic_version import SemanticVersion
 from app.db.models.team import Team
@@ -43,4 +47,8 @@ __all__ = [
     "DashboardTile",
     "SemanticVersion",
     "ArtifactDependency",
+    "AuditEvent",
+    "Schedule",
+    "DataPolicy",
+    "CostAttribution",
 ]

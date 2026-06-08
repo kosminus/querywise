@@ -199,11 +199,20 @@ class BigQueryConnector(BaseConnector):
         truncated = len(rows) > max_rows
         rows = rows[:max_rows]
 
+        # Job stats for cost attribution (bytes scanned / billed, slot time).
+        job_stats = {
+            "scanned_bytes": getattr(job, "total_bytes_processed", None),
+            "billed_bytes": getattr(job, "total_bytes_billed", None),
+            "slot_ms": getattr(job, "slot_millis", None),
+        }
+        job_stats = {k: v for k, v in job_stats.items() if v is not None}
+
         if not rows:
             return QueryResult(
                 columns=[],
                 column_types=[],
                 rows=[],
+                stats=job_stats,
                 row_count=0,
                 execution_time_ms=elapsed_ms,
                 truncated=False,
@@ -223,6 +232,7 @@ class BigQueryConnector(BaseConnector):
             row_count=len(result_rows),
             execution_time_ms=elapsed_ms,
             truncated=truncated,
+            stats=job_stats,
         )
 
     async def get_sample_values(

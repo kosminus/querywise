@@ -25,7 +25,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[llm,dev,observability,lineage]"
+        run: pip install -e ".[llm,dev,observability,lineage,scheduling]"
 
       # Gating: the test suite must pass before any Phase 0+ refactor lands.
       - name: Tests

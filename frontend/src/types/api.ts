@@ -401,3 +401,98 @@ export interface LineageRef {
   table_id: string | null;
   column_id: string | null;
 }
+
+export interface AuditEvent {
+  id: string;
+  event_type: string;
+  actor_id: string | null;
+  workspace_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+// --- Phase 4: Schedules (M2) ---
+
+export interface ScheduleThreshold {
+  metric: string;
+  op: string;
+  value: number;
+}
+
+export interface Schedule {
+  id: string;
+  name: string;
+  target_type: 'saved_query' | 'dashboard';
+  target_id: string;
+  cron: string;
+  channel: 'email' | 'slack' | 'log';
+  recipients: string[];
+  params: Record<string, unknown>;
+  threshold: ScheduleThreshold | null;
+  only_on_threshold: boolean;
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleRunResult {
+  schedule_id: string;
+  status: string;
+  delivered: boolean;
+  threshold_met: boolean | null;
+  error: string | null;
+}
+
+// --- Phase 4: Data policies (M3) ---
+
+export interface DataPolicy {
+  id: string;
+  connection_id: string;
+  name: string;
+  enabled: boolean;
+  priority: number;
+  applies_to_roles: string[];
+  max_rows: number | null;
+  max_runtime_seconds: number | null;
+  allowed_tables: string[];
+  blocked_tables: string[];
+  blocked_columns: string[];
+  masked_columns: string[];
+  row_filters: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Phase 4: Cost & usage analytics (M4) ---
+
+export interface UsageSummary {
+  total_queries: number;
+  error_count: number;
+  error_rate: number;
+  total_cost_usd: number;
+  total_scanned_bytes: number;
+  avg_execution_ms: number | null;
+}
+
+export interface CostByEntry {
+  key: string | null;
+  cost_usd: number;
+  query_count: number;
+}
+
+export interface SlowestQuery {
+  query_execution_id: string | null;
+  execution_time_ms: number | null;
+  cost_usd: number;
+  source_provider: string | null;
+  question: string | null;
+}
+
+export interface TableUsage {
+  table: string;
+  query_count: number;
+}

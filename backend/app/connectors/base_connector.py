@@ -51,6 +51,11 @@ class QueryResult:
     row_count: int
     execution_time_ms: float
     truncated: bool
+    # Optional connector-reported execution stats for cost attribution
+    # (e.g. BigQuery ``scanned_bytes`` / ``slot_ms``, Databricks ``dbu``).
+    # Default empty — connectors populate what they can; cost_service falls
+    # back to time-based estimation otherwise.
+    stats: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseConnector(ABC):
