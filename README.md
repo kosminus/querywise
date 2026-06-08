@@ -357,8 +357,8 @@ cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -e ".[llm,dev]"
+# Install dependencies (add `lineage` for sqlglot-based catalog lineage)
+pip install -e ".[llm,dev,lineage]"
 
 # Start PostgreSQL with pgvector (must be running on localhost:5432)
 # Run migrations

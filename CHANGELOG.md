@@ -94,7 +94,8 @@ product surface; all optional dependencies degrade gracefully).
   to a no-op if sqlglot is absent). Powers the per-artifact "what this touches" view
   (`.../{entity}/{id}/lineage`) and the impact view "what depends on this table"
   (`GET .../catalog/lineage?table=`).
-- New optional dependency extra: `lineage` (`sqlglot`).
+- New optional dependency extra: `lineage` (`sqlglot`); installed in the backend image and in CI
+  so the lineage tests run (they `importorskip` past `sqlglot` when the extra is absent).
 - **Deferred to a later milestone:** column profiling (null rate / distinct counts / sample values).
 
 ## [1.0.0] - 2026-06-04

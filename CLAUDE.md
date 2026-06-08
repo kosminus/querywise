@@ -44,7 +44,7 @@ For manual seeding (if auto-setup disabled): `python backend/scripts/seed_ifrs9_
 Run from `backend/`:
 
 ```bash
-pip install -e ".[llm,dev,bigquery,databricks]"  # Install all deps
+pip install -e ".[llm,dev,bigquery,databricks,lineage]"  # Install all deps (add export,observability,jobs as needed)
 alembic upgrade head                  # Run migrations
 uvicorn app.main:app --reload         # Dev server on :8000
 pytest                                # Run tests
@@ -233,7 +233,7 @@ dependencies degrade gracefully — the app boots without `structlog` /
 - **Jobs** (`app/jobs/`): `JobQueue` ABC with `InProcessJobQueue` (asyncio, default) and `ArqJobQueue` (Redis). Jobs are registered by name in `registry.py`; `launch_background_embeddings` submits `"generate_embeddings"` through `get_job_queue()`. For arq, run a worker: `JOB_BACKEND=arq arq app.jobs.worker.WorkerSettings` (embedding progress then lives in the worker process).
 - **Health** (`app/api/v1/endpoints/health.py`): `GET /health/live` (process) and `GET /health/ready` (DB + job queue + LLM provider, 503 on failure) for K8s probes.
 - **LLM endpoints:** Azure OpenAI provider (`azure_openai`) added so the pipeline can run inside a customer VPC; registered in `provider_registry`.
-- **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). Optional deps: `pip install -e ".[observability,jobs]"`.
+- **Tests/CI:** unit tests in `backend/tests/` (no DB/LLM needed); `.github/workflows/ci.yml` installs `.[llm,dev,observability,lineage]` and runs pytest (gating) + ruff/mypy/frontend build (advisory until pre-existing lint debt is cleared). The lineage tests need `sqlglot` (the `[lineage]` extra) and `pytest.importorskip` past it otherwise. Optional deps: `pip install -e ".[observability,jobs]"`.
 
 ## Identity & auth (Phase 1)
 
