@@ -47,6 +47,9 @@ A full-stack application that translates natural language questions into SQL que
 - **Schema introspection** — auto-discovers tables, columns, types, relationships from target databases
 - **Conversational Assistant** — chat panel for NL queries and semantic layer editing (glossary terms, metrics, dictionary entries, knowledge)
 - **Identity, teams, and ownership** — real users, roles (viewer/editor), teams, and workspace-based ownership
+- **Saved queries** — name and pin a question + SQL with typed parameters (`{{region}}`); re-run, version, clone, and export (CSV/JSON/XLSX)
+- **Charts & result caching** — visualize a saved query (line/bar/area/pie/scatter via Recharts); results are snapshotted to a Postgres cache so re-runs don't re-hit the warehouse
+- **Dashboards** — compose saved queries into a shareable, draggable tile grid with dashboard-level filters that flow into every tile's SQL
 - **Production hardening** — rate limiting, async job queue, OpenTelemetry tracing, structured logging, health probes
 
 
@@ -448,7 +451,12 @@ querywise/
 │   │   │       ├── dictionary.py   # DictionaryEntry (value mappings)
 │   │   │       ├── knowledge.py    # KnowledgeDocument + KnowledgeChunk (with embedding vector)
 │   │   │       ├── sample_query.py # SampleQuery (with embedding vector)
-│   │   │       └── query_history.py# QueryExecution (full audit log)
+│   │   │       ├── query_history.py# QueryExecution (full audit log)
+│   │   │       ├── saved_query.py  # SavedQuery (pinned SQL + typed params)
+│   │   │       ├── chart.py        # Chart (viz config per saved query)
+│   │   │       ├── result_snapshot.py # ResultSnapshot (result persistence + cache)
+│   │   │       ├── dashboard.py    # Dashboard (workspace-scoped, with filters)
+│   │   │       └── dashboard_tile.py # DashboardTile (grid position + refresh)
 │   │   ├── api/v1/
 │   │   │   ├── router.py           # Aggregates all endpoint routers
 │   │   │   ├── endpoints/
@@ -461,7 +469,9 @@ querywise/
 │   │   │   │   ├── sample_queries.py
 │   │   │   │   ├── knowledge.py     # Knowledge document CRUD + URL fetch
 │   │   │   │   ├── query.py        # POST /query (full pipeline), POST /query/sql-only
-│   │   │   │   └── query_history.py# History list + favorite toggle
+│   │   │   │   ├── query_history.py# History list + favorite toggle
+│   │   │   │   ├── saved_queries.py# Saved query CRUD + run/clone/export + charts
+│   │   │   │   └── dashboards.py    # Dashboard + tile CRUD, layout, tile run
 │   │   │   └── schemas/            # Pydantic request/response models
 │   │   ├── services/
 │   │   │   ├── query_service.py    # Full pipeline orchestrator
@@ -519,16 +529,26 @@ querywise/
         ├── main.tsx                 # MantineProvider + QueryClient + Router
         ├── App.tsx                  # Route definitions
         ├── api/
-        │   ├── client.ts           # Axios instance
+        │   ├── client.ts           # Axios instance (session cookie + workspace header)
         │   ├── connectionApi.ts    # Connection endpoints
         │   ├── queryApi.ts         # Query + history endpoints
         │   ├── glossaryApi.ts      # Glossary + metrics + dictionary endpoints
-│   └── knowledgeApi.ts     # Knowledge document CRUD + URL fetch
+        │   ├── knowledgeApi.ts     # Knowledge document CRUD + URL fetch
+        │   ├── savedQueriesApi.ts  # Saved query CRUD + run/clone/export + charts
+        │   └── dashboardsApi.ts    # Dashboard + tile CRUD, layout, tile run
         ├── components/
-        │   └── layout/
-        │       └── AppLayout.tsx   # Mantine AppShell with sidebar nav
+        │   ├── layout/
+        │   │   └── AppLayout.tsx   # Mantine AppShell with sidebar nav
+        │   ├── charts/
+        │   │   └── ChartView.tsx   # Recharts renderer (line/bar/area/pie/scatter)
+        │   ├── common/
+        │   │   └── ParamInputs.tsx # Typed param/filter inputs (shared)
+        │   ├── savedQueries/       # Run drawer + form modal
+        │   └── dashboards/         # Grid, tile card, filters bar, modals
         ├── hooks/
-        │   └── useConnections.ts   # React Query hooks for connections
+        │   ├── useConnections.ts   # React Query hooks for connections
+        │   ├── useSavedQueries.ts  # Saved query + chart hooks
+        │   └── useDashboards.ts    # Dashboard + tile hooks
         ├── pages/
         │   ├── QueryPage.tsx       # NL input → SQL preview → results table
         │   ├── ConnectionsPage.tsx # Add/edit/delete/test/introspect connections
@@ -536,7 +556,10 @@ querywise/
         │   ├── MetricsPage.tsx     # Metric definition management
         │   ├── DictionaryPage.tsx  # Column value mapping management
         │   ├── KnowledgePage.tsx   # Knowledge document import/manage (text + URL fetch)
-        │   └── HistoryPage.tsx     # Query execution history + favorites
+        │   ├── HistoryPage.tsx     # Query execution history + favorites
+        │   ├── SavedQueriesPage.tsx# Saved queries: run, chart, export
+        │   ├── DashboardsPage.tsx  # Dashboard list
+        │   └── DashboardDetailPage.tsx # Dashboard grid + filters
         └── types/
             └── api.ts              # TypeScript interfaces
 ```
@@ -707,6 +730,29 @@ All endpoints are under `/api/v1`.
 |--------|------|-------------|
 | `POST` | `/query` | Execute NL query (full pipeline) |
 | `POST` | `/query/sql-only` | Generate SQL without executing |
+
+### Saved Queries
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET/POST` | `/connections/{id}/saved-queries` | List/create saved queries |
+| `GET/PUT/DELETE` | `/connections/{id}/saved-queries/{sq_id}` | Get/update/delete saved query |
+| `POST` | `/connections/{id}/saved-queries/{sq_id}/run` | Run (cache-first; `refresh` to bypass) |
+| `POST` | `/connections/{id}/saved-queries/{sq_id}/clone` | Clone a saved query |
+| `GET` | `/connections/{id}/saved-queries/{sq_id}/export` | Export results (`format=csv\|json\|xlsx`) |
+| `GET/POST` | `/connections/{id}/saved-queries/{sq_id}/charts` | List/create charts |
+| `PUT/DELETE` | `/connections/{id}/saved-queries/{sq_id}/charts/{chart_id}` | Update/delete chart |
+
+### Dashboards
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET/POST` | `/dashboards` | List/create dashboards (workspace-scoped) |
+| `GET/PUT/DELETE` | `/dashboards/{id}` | Get/update/delete dashboard |
+| `POST` | `/dashboards/{id}/tiles` | Add a tile |
+| `PUT/DELETE` | `/dashboards/{id}/tiles/{tile_id}` | Update/delete a tile |
+| `PUT` | `/dashboards/{id}/layout` | Bulk-save tile positions |
+| `POST` | `/dashboards/{id}/tiles/{tile_id}/run` | Run a tile with dashboard filters |
 
 ### History
 
