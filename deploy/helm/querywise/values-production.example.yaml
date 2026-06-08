@@ -1,0 +1,61 @@
+# Example production overrides for the QueryWise chart.
+#   helm upgrade --install querywise deploy/helm/querywise \
+#     -n querywise --create-namespace \
+#     -f deploy/helm/querywise/values-production.example.yaml
+#
+# Prefer secrets.existingSecret (external-secrets / sealed-secrets) over inline
+# secret values for anything real.
+
+image:
+  backend:
+    repository: ghcr.io/your-org/querywise-backend
+    tag: "1.0.0"
+  frontend:
+    repository: ghcr.io/your-org/querywise-frontend
+    tag: "1.0.0"
+
+backend:
+  uvicornWorkers: 4
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 70
+
+worker:
+  replicaCount: 2
+
+frontend:
+  replicaCount: 3
+
+# IRSA / Workload Identity so pods can reach a managed secrets backend.
+serviceAccount:
+  annotations:
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/querywise
+    # iam.gke.io/gcp-service-account: querywise@PROJECT.iam.gserviceaccount.com
+
+ingress:
+  enabled: true
+  className: nginx
+  host: querywise.yourcompany.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Streamable-HTTP MCP needs buffering off + long read timeout at the edge:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  tls:
+    enabled: true
+    secretName: querywise-tls
+
+config:
+  CORS_ORIGINS: '["https://querywise.yourcompany.com"]'
+  DEFAULT_ADMIN_EMAIL: admin@yourcompany.com
+  DEFAULT_LLM_PROVIDER: openai
+  DEFAULT_LLM_MODEL: gpt-5.2
+  EMBEDDING_DIMENSION: "1536"
+
+# Real deployments: sync this Secret with external-secrets and reference it.
+# It must carry DATABASE_URL, REDIS_URL, ENCRYPTION_KEY, JWT_SECRET, and your
+# LLM provider key(s).
+secrets:
+  existingSecret: querywise-secrets

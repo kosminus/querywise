@@ -1,0 +1,21 @@
+apiVersion: v2
+name: querywise
+description: >-
+  QueryWise — text-to-SQL with a semantic metadata layer. Single-tenant per
+  deployment; brings up the backend (uvicorn), arq worker, and frontend edge,
+  with a one-shot migration hook. Managed Postgres (pgvector) and Redis are
+  expected to be provided out-of-cluster (see the Terraform modules).
+type: application
+# Chart version — bump on chart changes.
+version: 0.1.0
+# Tracks the QueryWise app release the chart defaults target.
+appVersion: "0.1.0"
+keywords:
+  - text-to-sql
+  - semantic-layer
+  - analytics
+home: https://github.com/kosminus/querywise
+sources:
+  - https://github.com/kosminus/querywise
+maintainers:
+  - name: QueryWise

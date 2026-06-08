@@ -1,0 +1,204 @@
+# Default values for the QueryWise chart.
+# Override per-environment with `-f my-values.yaml` or `--set`.
+
+# -- Naming -------------------------------------------------------------------
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Images -------------------------------------------------------------------
+# Built from backend/Dockerfile.prod and frontend/Dockerfile.prod, pushed to
+# your registry by CI. Override repository/tag per environment.
+image:
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  backend:
+    repository: ghcr.io/kosminus/querywise-backend
+    tag: "" # defaults to .Chart.AppVersion
+  frontend:
+    repository: ghcr.io/kosminus/querywise-frontend
+    tag: "" # defaults to .Chart.AppVersion
+
+# -- Backend (uvicorn API) ----------------------------------------------------
+backend:
+  replicaCount: 2
+  uvicornWorkers: 4
+  containerPort: 8000
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  # runAsNonRoot — image runs as uid 1001.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- Worker (arq background jobs) ---------------------------------------------
+worker:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- Frontend (nginx edge — serves the SPA) -----------------------------------
+frontend:
+  replicaCount: 2
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  # nginx-unprivileged runs as uid 101.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- Schema migration ---------------------------------------------------------
+# Runs `alembic upgrade head` as a pre-install/pre-upgrade Helm hook Job, so
+# migrations complete before new backend pods roll and replicas never race.
+migrate:
+  enabled: true
+  backoffLimit: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# -- Service account ----------------------------------------------------------
+# Annotate for IRSA (EKS) / Workload Identity (GKE) / Azure Workload Identity so
+# pods can reach a managed secrets backend or the external-secrets operator.
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -- Ingress ------------------------------------------------------------------
+# Path-based routing: /api + /mcp -> backend, everything else -> frontend SPA.
+# The SPA is built same-origin so this is all it needs.
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  host: querywise.example.com
+  tls:
+    enabled: false
+    secretName: querywise-tls
+
+# -- Non-secret configuration (rendered into a ConfigMap, injected as env) -----
+config:
+  ENVIRONMENT: production
+  DEBUG: "false"
+  LOG_LEVEL: INFO
+  LOG_FORMAT: json
+  ENABLE_METRICS: "true"
+  SERVICE_NAME: querywise-backend
+  OTEL_ENABLED: "false"
+  # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+
+  # Jobs: arq (Redis) is required for the multi-pod worker topology.
+  JOB_BACKEND: arq
+
+  # Auth (Phase 1) — never disable in prod.
+  DISABLE_AUTH: "false"
+  AUTH_PROVIDER: local
+  AUTH_COOKIE_SECURE: "true"
+  AUTH_COOKIE_SAMESITE: lax
+  DEFAULT_ORG_SLUG: default
+  DEFAULT_ADMIN_EMAIL: admin@querywise.local
+
+  # No sample-DB seeding in prod.
+  AUTO_SETUP_SAMPLE_DB: "false"
+
+  # CORS — same-origin needs no entries; add cross-origin frontends here.
+  CORS_ORIGINS: '["https://querywise.example.com"]'
+
+  # LLM (OpenAI default — switch provider here; keys go in `secrets`).
+  DEFAULT_LLM_PROVIDER: openai
+  DEFAULT_LLM_MODEL: gpt-5.2
+  EMBEDDING_MODEL: text-embedding-3-small
+  EMBEDDING_DIMENSION: "1536"
+
+  # Query defaults + rate limiting.
+  DEFAULT_QUERY_TIMEOUT_SECONDS: "30"
+  DEFAULT_MAX_ROWS: "1000"
+  MAX_RETRY_ATTEMPTS: "3"
+  MAX_QUERIES_PER_MINUTE: "30"
+  RATE_LIMIT_ENABLED: "true"
+
+# -- Secrets ------------------------------------------------------------------
+# Either:
+#  (a) point at a Secret you manage out-of-band (external-secrets operator,
+#      sealed-secrets, cloud sync) via `existingSecret`, OR
+#  (b) let the chart create one from `data` below (fine for bootstrap, but the
+#      values land in your release — prefer (a) for real deployments).
+secrets:
+  existingSecret: ""
+  data:
+    # REQUIRED — managed Postgres (pgvector) and Redis DSNs.
+    DATABASE_URL: ""
+    REDIS_URL: ""
+    # REQUIRED — generate before install (see .env.prod.example).
+    ENCRYPTION_KEY: ""
+    JWT_SECRET: ""
+    # Optional bootstrap admin password.
+    DEFAULT_ADMIN_PASSWORD: ""
+    # LLM provider keys (set the ones your provider needs).
+    OPENAI_API_KEY: ""
+    # ANTHROPIC_API_KEY: ""
+    # AZURE_OPENAI_API_KEY: ""
+
+# -- Pod-level security context (shared) --------------------------------------
+podSecurityContext:
+  fsGroup: 1001

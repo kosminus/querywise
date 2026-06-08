@@ -1,0 +1,52 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullName := include "querywise.fullname" . -}}
+{{- $backendSvc := printf "%s-backend" $fullName -}}
+{{- $frontendSvc := printf "%s-frontend" $fullName -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "querywise.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # API + MCP go straight to the backend; the SPA calls these same-origin.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $backendSvc }}
+                port:
+                  number: {{ .Values.backend.service.port }}
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $backendSvc }}
+                port:
+                  number: {{ .Values.backend.service.port }}
+          # Everything else is the SPA bundle.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $frontendSvc }}
+                port:
+                  number: {{ .Values.frontend.service.port }}
+{{- end }}

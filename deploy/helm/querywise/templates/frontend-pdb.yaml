@@ -1,0 +1,14 @@
+{{- if .Values.frontend.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "querywise.fullname" . }}-frontend
+  labels:
+    {{- include "querywise.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "querywise.componentSelectorLabels" (dict "ctx" . "component" "frontend") | nindent 6 }}
+{{- end }}
