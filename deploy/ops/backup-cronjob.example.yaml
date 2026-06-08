@@ -1,0 +1,78 @@
+# Optional: scheduled encrypted backups in-cluster. Runs deploy/ops/backup.sh
+# nightly against the same Secret the Helm release uses.
+#
+# Prereqs:
+#   1. The script as a ConfigMap (keeps it in sync with deploy/ops/backup.sh):
+#        kubectl -n querywise create configmap querywise-backup-script \
+#          --from-file=backup.sh=deploy/ops/backup.sh
+#   2. A BACKUP_PASSPHRASE key in the querywise-secrets Secret (add it to your
+#      cloud secret store so external-secrets syncs it alongside DATABASE_URL).
+#   3. A StorageClass for the PVC (or swap the PVC for an emptyDir + offsite
+#      upload by setting BACKUP_S3_URI/BACKUP_GCS_URI and using an image that
+#      bundles the matching cloud CLI).
+#
+# The postgres:16 image provides pg_dump + openssl. Apply with:
+#   kubectl -n querywise apply -f backup-cronjob.example.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: querywise-backups
+  namespace: querywise
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: querywise-backup
+  namespace: querywise
+spec:
+  schedule: "0 3 * * *" # 03:00 UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+          containers:
+            - name: backup
+              image: postgres:16
+              command: ["bash", "/scripts/backup.sh"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: querywise-secrets
+                      key: DATABASE_URL
+                - name: BACKUP_PASSPHRASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: querywise-secrets
+                      key: BACKUP_PASSPHRASE
+                - name: BACKUP_DIR
+                  value: /backups
+                - name: BACKUP_RETENTION_DAYS
+                  value: "14"
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: script
+              configMap:
+                name: querywise-backup-script
+            - name: backups
+              persistentVolumeClaim:
+                claimName: querywise-backups
