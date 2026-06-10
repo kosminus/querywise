@@ -103,6 +103,7 @@ else comes from the chart defaults plus an optional committed overlay
 
 | What | Where | Value |
 |------|-------|-------|
+| `DEPLOY_ENABLED` | Repository **variable** (Actions → Variables) | `true` to enable the deploy jobs; unset/anything else and they are skipped (the workflow still builds + pushes images) |
 | `KUBE_CONFIG` | Environment secret on **staging** and **production** | base64-encoded kubeconfig for that cluster |
 | Required reviewers | **production** environment protection rules | who approves prod deploys |
 | Packages: write | repo default `GITHUB_TOKEN` | already granted in the workflow |
