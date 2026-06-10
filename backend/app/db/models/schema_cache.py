@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config import settings
@@ -15,7 +15,9 @@ class CachedTable(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     connection_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("database_connections.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("database_connections.id", ondelete="CASCADE"),
+        nullable=False,
     )
     schema_name: Mapped[str] = mapped_column(String(255), nullable=False)
     table_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -23,9 +25,7 @@ class CachedTable(Base):
     comment: Mapped[str | None] = mapped_column(Text)
     row_count_estimate: Mapped[int | None] = mapped_column(Integer)
     description_embedding = mapped_column(Vector(settings.embedding_dimension), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -66,9 +66,7 @@ class CachedColumn(Base):
     comment: Mapped[str | None] = mapped_column(Text)
     ordinal_position: Mapped[int] = mapped_column(Integer, nullable=False)
     description_embedding = mapped_column(Vector(settings.embedding_dimension), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     table: Mapped["CachedTable"] = relationship(back_populates="columns")
@@ -82,9 +80,17 @@ class CachedRelationship(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     connection_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("database_connections.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("database_connections.id", ondelete="CASCADE"),
+        nullable=False,
     )
     constraint_name: Mapped[str | None] = mapped_column(String(255))
+    # 'fk' = declared foreign key (re-derived on every introspect);
+    # 'inferred' = compiler-accepted edge (rematerialized from accepted findings).
+    origin: Mapped[str] = mapped_column(String(20), nullable=False, default="fk")
+    confidence: Mapped[float | None] = mapped_column(Float)
+    cardinality: Mapped[str | None] = mapped_column(String(10))  # '1:1'|'N:1'|'1:N'|'N:N'
+    evidence = mapped_column(JSONB, nullable=True)
     source_table_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cached_tables.id", ondelete="CASCADE"), nullable=False
     )
@@ -93,9 +99,7 @@ class CachedRelationship(Base):
         UUID(as_uuid=True), ForeignKey("cached_tables.id", ondelete="CASCADE"), nullable=False
     )
     target_column: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     source_table: Mapped["CachedTable"] = relationship(

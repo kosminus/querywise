@@ -26,6 +26,7 @@ import {
   IconClockHour4,
   IconLockCog,
   IconChartHistogram,
+  IconSparkles,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { EmbeddingStatusBanner } from '../common/EmbeddingStatusBanner';
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   { label: 'Dictionary', path: '/dictionary', icon: IconVocabulary },
   { label: 'Knowledge', path: '/knowledge', icon: IconFileText },
   { label: 'Catalog', path: '/catalog', icon: IconBook2 },
+  { label: 'Compiler', path: '/compiler', icon: IconSparkles },
   { label: 'Schedules', path: '/schedules', icon: IconClockHour4 },
   { label: 'History', path: '/history', icon: IconHistory },
   { label: 'Usage & Cost', path: '/analytics', icon: IconChartHistogram, adminOnly: true },

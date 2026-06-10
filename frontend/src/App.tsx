@@ -13,6 +13,7 @@ import { DashboardDetailPage } from './pages/DashboardDetailPage';
 import { DictionaryPage } from './pages/DictionaryPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { CatalogPage } from './pages/CatalogPage';
+import { CompilerPage } from './pages/CompilerPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { AuditPage } from './pages/AuditPage';
 import { SchedulesPage } from './pages/SchedulesPage';
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/dictionary" element={<DictionaryPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/catalog" element={<CatalogPage />} />
+          <Route path="/compiler" element={<CompilerPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/schedules" element={<SchedulesPage />} />
           <Route path="/policies" element={<PoliciesPage />} />

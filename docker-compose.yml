@@ -15,9 +15,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # Sample target database for development/testing
+  # Sample target database for development/testing.
+  # Hosts two databases: sampledb (IFRS 9, curated) and opsdb (hostile
+  # operational-style schema for the semantic layer compiler).
+  # pg_stat_statements feeds the compiler's query-log collector.
+  # NOTE: init scripts only run on a fresh volume (docker compose down -v).
   sample-db:
     image: postgres:16
+    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all
     environment:
       POSTGRES_DB: sampledb
       POSTGRES_USER: sample
@@ -26,7 +31,9 @@ services:
       - "5433:5432"
     volumes:
       - sample_db_data:/var/lib/postgresql/data
-      - ./backend/tests/fixtures/sample_seed.sql:/docker-entrypoint-initdb.d/seed.sql
+      - ./backend/tests/fixtures/ops_extensions.sql:/docker-entrypoint-initdb.d/05_extensions.sql
+      - ./backend/tests/fixtures/sample_seed.sql:/docker-entrypoint-initdb.d/10_seed.sql
+      - ./backend/tests/fixtures/ops_seed.sql:/docker-entrypoint-initdb.d/20_ops_seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sample -d sampledb"]
       interval: 5s

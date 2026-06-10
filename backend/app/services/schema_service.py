@@ -104,10 +104,18 @@ async def introspect_and_cache(
     conn.last_introspected_at = datetime.now(UTC)
     await db.flush()
 
+    # Re-create compiler-accepted artifacts that hang off the (just wiped)
+    # schema cache: inferred relationships and dictionary entries. Accepted
+    # compilation findings are name-keyed and survive re-introspection.
+    from app.services import compilation_service
+
+    rematerialized = await compilation_service.rematerialize_accepted(db, connection_id)
+
     return {
         "tables_found": total_tables,
         "columns_found": total_columns,
         "relationships_found": total_relationships,
+        "rematerialized": rematerialized,
     }
 
 

@@ -2,6 +2,7 @@ from app.db.models.api_key import ApiKey
 from app.db.models.artifact_dependency import ArtifactDependency
 from app.db.models.audit_event import AuditEvent
 from app.db.models.chart import Chart
+from app.db.models.compilation import CompilationFinding, CompilationRun
 from app.db.models.connection import DatabaseConnection
 from app.db.models.cost_attribution import CostAttribution
 from app.db.models.dashboard import Dashboard
@@ -51,4 +52,6 @@ __all__ = [
     "Schedule",
     "DataPolicy",
     "CostAttribution",
+    "CompilationRun",
+    "CompilationFinding",
 ]
