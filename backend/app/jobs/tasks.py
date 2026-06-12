@@ -6,8 +6,11 @@ services that define them (e.g. ``setup_service`` at startup); importing this
 module makes that registration explicit and order-independent.
 """
 
-# Registers "generate_embeddings".
-import app.services.setup_service  # noqa: F401
-
 # Registers "run_schedule".
 import app.jobs.scheduler  # noqa: F401
+
+# Registers "semantic_compilation".
+import app.services.compilation_service  # noqa: F401
+
+# Registers "generate_embeddings".
+import app.services.setup_service  # noqa: F401

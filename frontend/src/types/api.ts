@@ -496,3 +496,62 @@ export interface TableUsage {
   table: string;
   query_count: number;
 }
+
+// --- Semantic layer compiler ---
+
+export interface CompilationProgress {
+  total: number;
+  completed: number;
+  stage: string;
+  status: string;
+  error: string | null;
+}
+
+export interface CompilationRun {
+  id: string;
+  connection_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  options: Record<string, unknown>;
+  stats: {
+    findings?: Record<string, number>;
+    sources_available?: Record<string, boolean>;
+    superseded_proposals?: number;
+    tables_examined?: number;
+    views_examined?: number;
+    logged_queries_examined?: number;
+  };
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  progress: CompilationProgress | null;
+}
+
+export interface CompilationEvidence {
+  source: string;
+  detail: string;
+}
+
+export interface CompilationFinding {
+  id: string;
+  run_id: string;
+  connection_id: string;
+  kind:
+    | 'relationship'
+    | 'metric'
+    | 'dictionary'
+    | 'glossary'
+    | 'data_policy_row_filter'
+    | 'data_policy_masking'
+    | 'dead_table'
+    | 'fanout_warning';
+  title: string;
+  payload: Record<string, unknown>;
+  evidence: CompilationEvidence[];
+  confidence: number;
+  status: 'proposed' | 'accepted' | 'dismissed';
+  created_entity_type: string | null;
+  created_entity_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
